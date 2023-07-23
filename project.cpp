@@ -6,6 +6,22 @@
 #include <sys/wait.h>
 #include <ctype.h>
 #include <math.h>
+#include <queue>
+using namespace std;
+
+
+class Compare {
+public:
+    bool operator()(pair<int,int> firstPair, pair<int,int> secondPair)
+    {
+        if (firstPair.second < secondPair.second) {
+            return true;
+        }
+        return false;
+    }
+};
+
+
 
 double lambda;
 int upperBound;
@@ -47,6 +63,8 @@ int main(int argc, char** argv){
     lambda = atof(*argv);
     argv++;
     upperBound = atoi(*argv);
+
+    priority_queue<pair<int,int>, vector<pair<int,int>>, Compare> queue;
     if(CPUProcesses==1){
         printf("<<< PROJECT PART I -- process set (n=%d) with %d CPU-bound process >>>\n",processes,CPUProcesses);
     }
