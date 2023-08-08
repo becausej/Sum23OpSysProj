@@ -1,101 +1,99 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
+#include <string>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <ctype.h>
 #include <math.h>
 #include <queue>
 #include <stdlib.h>
+#include <list>
+#include <utility>
 
-#include "header.h"
 
 using namespace std;
 
-
-class FCFSCompare {
-public:
-    bool operator()(int* firstPair, int* secondPair)
-    {
-        return *firstPair < *secondPair;
+double LAMBDA;
+int UPPER_BOUND;
+double next_exp(int mode){
+    int cont = 1;
+    double toReturn;
+    while(cont){
+        double result = drand48();
+        toReturn = -log(result)/LAMBDA;
+        if(mode==0){
+            toReturn = floor(toReturn);
+            if(toReturn <= UPPER_BOUND){
+                cont = 0;
+            }
+        }
+        else{
+            toReturn = ceil(toReturn);
+            if(toReturn <= UPPER_BOUND){
+                cont = 0;
+            }
+        }
     }
-};
+    return toReturn;}
+
+#include "process.h"
+#include "FCFSCPU.h"
+
+void FCFS(vector<Process*> processes, int ctxSwitchTime) {
+    FCFSCPU cpu(processes, ctxSwitchTime);
+    cpu.run();
+}
+
+
 
 int main(int argc, char** argv){
-    if(argc!=8){
-        fprintf(stderr,"ERROR: Invalid arguments\n");
-        return EXIT_FAILURE;
+    if(argc!=9) {
+        fprintf(stderr,"ERROR: Invalid arguments\n"); return EXIT_FAILURE;
     }
-    int processes = atoi(*(argv+1));
-    int CPUProcesses = atoi(*(argv+2));
+    int numProcesses = atoi(*(argv+1));
+    int numCPUProcesses = atoi(*(argv+2));
     int seed = atoi(*(argv+3));
     LAMBDA = atof(*(argv+4));
     UPPER_BOUND = atoi(*(argv+5));
     int ctxSwitchTime = atoi(*(argv+6));
-    int timeSlice = atoi(*(argv+7));
-    printf("%i %i\n",ctxSwitchTime,timeSlice);
+    double alpha = atof(*(argv+7));
+    int timeSlice = atoi(*(argv+8));
+    printf("alpha: %f\n",alpha);
 
-
-
-
-
-    printf("<<< PROJECT PART I -- process set (n=%d) with %d CPU-bound process%s >>>\n",processes,CPUProcesses,CPUProcesses==1 ? "" : "es");
+    printf("<<< PROJECT PART I -- process set (n=%d) with %d CPU-bound process%s >>>\n",numProcesses,numCPUProcesses,numCPUProcesses==1 ? "" : "es");
     srand48(seed);
-
-    int* sizes = (int*) malloc(processes * sizeof(int));
-    int** data = (int**) malloc(processes * sizeof(int*));
+    vector<Process*> processes;
 
 
-    // priority_queue<int*, int**, FCFSCompare> FCFS;
     //IO BOUND
-    for(int i=0;i<processes-CPUProcesses;i++){
+    for(int i=0;i<numProcesses-numCPUProcesses;i++){
         int arrivalTime = next_exp(0);
-
         int num_bursts = (int)ceil(drand48()*64);
-        *(sizes+i) = 2*num_bursts;
-        *(data+i) = (int*) malloc((2*num_bursts) * sizeof(int));
-        **(data+i) = arrivalTime;
 
+        processes.push_back(new Process(i,arrivalTime,num_bursts,false));
 
-        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,*(data+i));
-        for(int j =0;j<num_bursts;j++){
-            int CPUBurst = next_exp(1);
-            *(*(data+i)+2*j + 1) = CPUBurst;
-            if(j!=num_bursts-1){
-                int IOBurst = next_exp(1)*10;
-                *(*(data+i)+2*j+1) = IOBurst;
-                // printf("--> CPU burst %dms --> I/O burst %dms\n",CPUBurst,IOBurst);
-            }
-            else{
-                // printf("--> CPU burst %dms\n",CPUBurst);
-            }
-
-        }
+        printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
+        
     }
     //CPU BOUND
-    for(int i=processes-CPUProcesses;i<processes;i++){
+    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
         int arrivalTime = next_exp(0);
         int num_bursts = (int)ceil(drand48()*64);
-        *(sizes+i) = 2*num_bursts;
-        *(data+i) = (int*) malloc((2*num_bursts) * sizeof(int));
-        **(data+i) = arrivalTime;
+        
+        processes.push_back(new Process(i,arrivalTime,num_bursts,true));
 
 
-        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+processes-CPUProcesses+65),arrivalTime,*(data+i));
-        for(int j =0;j<num_bursts;j++){
-            int CPUBurst = next_exp(1)*4;
-            *(*(data+i)+2*j + 1) = CPUBurst;
 
-            if(j!=num_bursts-1){
-                int IOBurst = next_exp(1)*10/8;
-                *(*(data+i)+2*j + 2) = IOBurst;
-                // printf("--> CPU burst %dms --> I/O burst %dms\n",CPUBurst,IOBurst);
-            }
-            else{
-                // printf("--> CPU burst %dms\n",CPUBurst);
-            }
-
-        }
+        printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+        
     }
+    printf("\n");
+    printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%f; t_slice=%dms >>>\n",ctxSwitchTime, alpha, timeSlice);
+    FCFS(processes, ctxSwitchTime);
+
+    // for (size_t i = 0; i < processes.size(); i++) {
+    //     free(processes[i]);
+    // }
+
 }

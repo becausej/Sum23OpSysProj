@@ -4,16 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 double LAMBDA;
 int UPPER_BOUND;
 double next_exp(int mode);
-
-enum STATE {
-	RUNNING = 0,
-	READY = 1,
-	WAITING = 2
-};
 
 
 
