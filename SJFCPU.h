@@ -1,7 +1,7 @@
-#ifndef FCFSCPU_H
-#define FCFSCPU_H
+#ifndef SJFCPU_H
+#define SJFCPU_H
 
-#include "FCFSprocess.h"
+#include "SJFprocess.h"
 #include <math.h>
 #include <numeric>
 #include <climits>
@@ -9,10 +9,10 @@
 extern unsigned long CUTOFF;
 
 
-class FCFSCPU {
+class SJFCPU {
 public:
 	//INFO
-	vector<FCFSProcess*> processes;
+	vector<SJFProcess*> processes;
 	int ctxSwitchTime;
 
 
@@ -22,13 +22,13 @@ public:
 
 
 	//LOCATIONS
-	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSArrivalTimeCompare> incoming;
-	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> readyQ;
-	priority_queue<FCFSProcess*, vector<FCFSProcess*>,FCFSIOBurstTimeCompare> IOBursts;
-	FCFSProcess* cpu = NULL;
-	FCFSProcess* cpuOut = NULL;
+	priority_queue<SJFProcess*,vector<SJFProcess*>,SJFArrivalTimeCompare> incoming;
+	priority_queue<SJFProcess*,vector<SJFProcess*>,SJFCompare> readyQ;
+	priority_queue<SJFProcess*, vector<SJFProcess*>,SJFIOBurstTimeCompare> IOBursts;
+	SJFProcess* cpu = NULL;
+	SJFProcess* cpuOut = NULL;
 	int ctxOutTime = INT_MAX;
-	FCFSProcess* cpuIn = NULL;
+	SJFProcess* cpuIn = NULL;
 	int ctxInTime = INT_MAX;
 
 
@@ -46,7 +46,7 @@ public:
 
 
 
-	FCFSCPU(vector<FCFSProcess*> procs, int switchTime) {
+	SJFCPU(vector<SJFProcess*> procs, int switchTime) {
 		ctxSwitchTime = switchTime;
 		for (size_t i = 0; i < procs.size(); i++) {
 			incoming.push(procs[i]);
@@ -122,29 +122,14 @@ public:
 
 
 	void run() {
-		printf("time %ldms: Simulator started for FCFS ",time);
+		printf("time %ldms: Simulator started for SJF ",time);
 		printReady();
 		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
 			int flag = getNextEvent();
-			// if (time < CUTOFF) printf("flag: %d\n",flag);
-
-			// if (time < CUTOFF) printf("iobursts: ");
-			// if (time < CUTOFF) printQueue(IOBursts);
-			// if (time < CUTOFF) printf("incoming: ");
-			// if (time < CUTOFF) printQueue(incoming);
-			// if (time < CUTOFF) printf("ready: ");
-			// if (time < CUTOFF) printQueue(readyQ);
-			// if (time < CUTOFF) printf("cpu: ");
-			// if (time < CUTOFF)  {
-			// 	if (cpu == NULL) {
-			// 		printf("null\n");
-			// 	} else { 
-			// 		printf("%c\n", (char)cpu->ID+65);
-			// 	} 
-			// }
 			if (flag == 0) {
 				// CPU FINISH
-				elapseTime(cpu->nextFinish(),flag);
+				int t = cpu->nextFinish();
+				elapseTime(t,flag);
 
 				//UPDATE METRICS
 				if (cpu->isCPUBound)
@@ -163,14 +148,20 @@ public:
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 					if (time < CUTOFF) printTime();
-					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printf("Process %c (tau %dms) completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->getPriority(), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printReady();
+					if (time < CUTOFF) printTime();
+					int old_tau = cpuOut->getPriority();
+					cpu->updatePriority();
+					int new_tau = cpuOut->getPriority();
+
+					if (time < CUTOFF) printf("Recalculating tau for process %c: old tau %dms ==> new tau %dms ", idtoc(cpu->ID), old_tau, new_tau);
 					if (time < CUTOFF) printReady();
 					if (time < CUTOFF) printTime();
 					if (time < CUTOFF) printf("Process %c switching out of CPU; blocking on I/O until time %ldms ", idtoc(cpu->ID), cpu->nextFinish() + time + ctxSwitchTime/2);
 					if (time < CUTOFF) printReady();
 				}
 				cpu = NULL;
-				
 			} 
 			else if (flag == 1) {
 				elapseTime(ctxOutTime,flag);
@@ -188,28 +179,28 @@ public:
 				cpuIn = NULL;
 				ctxInTime = INT_MAX;
 
-				cpu->priority = 0;
+				// cpu->priority = 0;
 
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst; ", idtoc(cpu->ID), cpu->nextFinish());
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 3) {
-				FCFSProcess* p = IOBursts.top();
+				SJFProcess* p = IOBursts.top();
 				int t = p->nextFinish();
 				IOBursts.pop();
 				p->elapseTime(t);
 				elapseTime(t,flag);
 
-				p->priority = readyQCounter;
-				readyQCounter++;
+				// p->priority = readyQCounter;
+				// readyQCounter++;
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 4) {
-				FCFSProcess* p = incoming.top();
+				SJFProcess* p = incoming.top();
 				incoming.pop();
 				int t = p->arrivalTime;
 				p->elapseTime(t);
@@ -217,11 +208,11 @@ public:
 
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c arrived; added to ready queue ", idtoc(p->ID));
+				if (time < CUTOFF) printf("Process %c (tau %dms) arrived; added to ready queue ", idtoc(p->ID), p->getPriority());
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 5) {
-				FCFSProcess* p = readyQ.top();
+				SJFProcess* p = readyQ.top();
 				readyQ.pop();
 				cpuIn = p;
 				ctxInTime = ctxSwitchTime / 2;
@@ -230,11 +221,11 @@ public:
 		}
 
 		printTime();
-		printf("Simulator ended for FCFS ");
+		printf("Simulator ended for SJF ");
 		printReady();
 
 		/*
-		Algorithm FCFS
+		Algorithm SJF
 		-- CPU utilization: 84.253%
 		-- average CPU burst time: 3067.776 ms (4071.000 ms/992.138 ms)
 		-- average wait time: 779.663 ms (217.284 ms/1943.207 ms)
@@ -271,7 +262,7 @@ public:
 		}
 
 
-		printf("Algorithm FCFS\n");
+		printf("Algorithm SJF\n");
 		printf("-- CPU utilization: %.3f%%\n",100.0 * cpuRunning / time);
 		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",(IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses,IOBOUND_cpu_burst_time/(double)numIOBoundProcesses);
 		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_wait/(double)numCPUBoundProcesses,IO_wait/(double)numIOBoundProcesses);
@@ -319,9 +310,9 @@ public:
 
 
 	void elapseTimeIO(int t) {
-		vector<FCFSProcess*> procs;
+		vector<SJFProcess*> procs;
 		while (!IOBursts.empty()) {
-			FCFSProcess* p = IOBursts.top();
+			SJFProcess* p = IOBursts.top();
 			IOBursts.pop();
 			p->elapseTime(t);
 			procs.push_back(p);
@@ -331,9 +322,9 @@ public:
 		}
 	}
 	void elapseTimeIncoming(int t) {
-		vector<FCFSProcess*> procs;
+		vector<SJFProcess*> procs;
 		while (!incoming.empty()) {
-			FCFSProcess* p = incoming.top();
+			SJFProcess* p = incoming.top();
 			incoming.pop();
 			p->elapseTime(t);
 			procs.push_back(p);
@@ -349,16 +340,16 @@ public:
 
 		if (cpu != NULL) {
 			cpu->elapseTime(t);
-			cpu->time_using_cpu += t;
+			cpu->incTimeUsingCPU(t);
 		}
 
 		if (cpuIn != NULL)
 			ctxInTime -= t;
 	}
 	void elapseWaitTimeReady(int t) {
-		vector<FCFSProcess*> procs;
+		vector<SJFProcess*> procs;
 		while (!readyQ.empty()) {
-			FCFSProcess* p = readyQ.top();
+			SJFProcess* p = readyQ.top();
 			readyQ.pop();
 			p->elapseWaitTime(t);
 			procs.push_back(p);
@@ -368,9 +359,9 @@ public:
 		}
 	}
 	void elapseTurnaroundTime(int t) {
-		vector<FCFSProcess*> procs;
+		vector<SJFProcess*> procs;
 		while (!readyQ.empty()) {
-			FCFSProcess* p = readyQ.top();
+			SJFProcess* p = readyQ.top();
 			readyQ.pop();
 			p->elapseTurnaroundTime(t);
 			procs.push_back(p);
@@ -398,7 +389,7 @@ public:
 	}
 
 	void printReady() {
-		priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> copy = readyQ;
+		priority_queue<SJFProcess*,vector<SJFProcess*>,SJFCompare> copy = readyQ;
 		if (copy.empty()) {
 			printf("[Q <empty> ]\n");
 		} else {
@@ -413,8 +404,8 @@ public:
 
 	}
 	template<class S>
-	void printQueue(priority_queue<FCFSProcess*, vector<FCFSProcess*>, S> queue) {
-		priority_queue<FCFSProcess*,vector<FCFSProcess*>,S> copy = queue;
+	void printQueue(priority_queue<SJFProcess*, vector<SJFProcess*>, S> queue) {
+		priority_queue<SJFProcess*,vector<SJFProcess*>,S> copy = queue;
 		
 		while (!copy.empty()) {
 			printf("%c ",idtoc(copy.top()->ID));

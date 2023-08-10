@@ -1,7 +1,7 @@
-#ifndef FCFSCPU_H
-#define FCFSCPU_H
+#ifndef RRCPU_H
+#define RRCPU_H
 
-#include "FCFSprocess.h"
+#include "RRprocess.h"
 #include <math.h>
 #include <numeric>
 #include <climits>
@@ -9,10 +9,10 @@
 extern unsigned long CUTOFF;
 
 
-class FCFSCPU {
+class RRCPU {
 public:
 	//INFO
-	vector<FCFSProcess*> processes;
+	vector<RRProcess*> processes;
 	int ctxSwitchTime;
 
 
@@ -22,13 +22,13 @@ public:
 
 
 	//LOCATIONS
-	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSArrivalTimeCompare> incoming;
-	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> readyQ;
-	priority_queue<FCFSProcess*, vector<FCFSProcess*>,FCFSIOBurstTimeCompare> IOBursts;
-	FCFSProcess* cpu = NULL;
-	FCFSProcess* cpuOut = NULL;
+	priority_queue<RRProcess*,vector<RRProcess*>,RRArrivalTimeCompare> incoming;
+	priority_queue<RRProcess*,vector<RRProcess*>,RRCompare> readyQ;
+	priority_queue<RRProcess*, vector<RRProcess*>,RRIOBurstTimeCompare> IOBursts;
+	RRProcess* cpu = NULL;
+	RRProcess* cpuOut = NULL;
 	int ctxOutTime = INT_MAX;
-	FCFSProcess* cpuIn = NULL;
+	RRProcess* cpuIn = NULL;
 	int ctxInTime = INT_MAX;
 
 
@@ -46,7 +46,7 @@ public:
 
 
 
-	FCFSCPU(vector<FCFSProcess*> procs, int switchTime) {
+	RRCPU(vector<RRProcess*> procs, int switchTime) {
 		ctxSwitchTime = switchTime;
 		for (size_t i = 0; i < procs.size(); i++) {
 			incoming.push(procs[i]);
@@ -122,7 +122,7 @@ public:
 
 
 	void run() {
-		printf("time %ldms: Simulator started for FCFS ",time);
+		printf("time %ldms: Simulator started for RR ",time);
 		printReady();
 		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
 			int flag = getNextEvent();
@@ -195,7 +195,7 @@ public:
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 3) {
-				FCFSProcess* p = IOBursts.top();
+				RRProcess* p = IOBursts.top();
 				int t = p->nextFinish();
 				IOBursts.pop();
 				p->elapseTime(t);
@@ -209,7 +209,7 @@ public:
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 4) {
-				FCFSProcess* p = incoming.top();
+				RRProcess* p = incoming.top();
 				incoming.pop();
 				int t = p->arrivalTime;
 				p->elapseTime(t);
@@ -221,7 +221,7 @@ public:
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 5) {
-				FCFSProcess* p = readyQ.top();
+				RRProcess* p = readyQ.top();
 				readyQ.pop();
 				cpuIn = p;
 				ctxInTime = ctxSwitchTime / 2;
@@ -230,11 +230,11 @@ public:
 		}
 
 		printTime();
-		printf("Simulator ended for FCFS ");
+		printf("Simulator ended for RR ");
 		printReady();
 
 		/*
-		Algorithm FCFS
+		Algorithm RR
 		-- CPU utilization: 84.253%
 		-- average CPU burst time: 3067.776 ms (4071.000 ms/992.138 ms)
 		-- average wait time: 779.663 ms (217.284 ms/1943.207 ms)
@@ -271,7 +271,7 @@ public:
 		}
 
 
-		printf("Algorithm FCFS\n");
+		printf("Algorithm RR\n");
 		printf("-- CPU utilization: %.3f%%\n",100.0 * cpuRunning / time);
 		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",(IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses,IOBOUND_cpu_burst_time/(double)numIOBoundProcesses);
 		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_wait/(double)numCPUBoundProcesses,IO_wait/(double)numIOBoundProcesses);
@@ -319,9 +319,9 @@ public:
 
 
 	void elapseTimeIO(int t) {
-		vector<FCFSProcess*> procs;
+		vector<RRProcess*> procs;
 		while (!IOBursts.empty()) {
-			FCFSProcess* p = IOBursts.top();
+			RRProcess* p = IOBursts.top();
 			IOBursts.pop();
 			p->elapseTime(t);
 			procs.push_back(p);
@@ -331,9 +331,9 @@ public:
 		}
 	}
 	void elapseTimeIncoming(int t) {
-		vector<FCFSProcess*> procs;
+		vector<RRProcess*> procs;
 		while (!incoming.empty()) {
-			FCFSProcess* p = incoming.top();
+			RRProcess* p = incoming.top();
 			incoming.pop();
 			p->elapseTime(t);
 			procs.push_back(p);
@@ -356,9 +356,9 @@ public:
 			ctxInTime -= t;
 	}
 	void elapseWaitTimeReady(int t) {
-		vector<FCFSProcess*> procs;
+		vector<RRProcess*> procs;
 		while (!readyQ.empty()) {
-			FCFSProcess* p = readyQ.top();
+			RRProcess* p = readyQ.top();
 			readyQ.pop();
 			p->elapseWaitTime(t);
 			procs.push_back(p);
@@ -368,9 +368,9 @@ public:
 		}
 	}
 	void elapseTurnaroundTime(int t) {
-		vector<FCFSProcess*> procs;
+		vector<RRProcess*> procs;
 		while (!readyQ.empty()) {
-			FCFSProcess* p = readyQ.top();
+			RRProcess* p = readyQ.top();
 			readyQ.pop();
 			p->elapseTurnaroundTime(t);
 			procs.push_back(p);
@@ -398,7 +398,7 @@ public:
 	}
 
 	void printReady() {
-		priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> copy = readyQ;
+		priority_queue<RRProcess*,vector<RRProcess*>,RRCompare> copy = readyQ;
 		if (copy.empty()) {
 			printf("[Q <empty> ]\n");
 		} else {
@@ -413,8 +413,8 @@ public:
 
 	}
 	template<class S>
-	void printQueue(priority_queue<FCFSProcess*, vector<FCFSProcess*>, S> queue) {
-		priority_queue<FCFSProcess*,vector<FCFSProcess*>,S> copy = queue;
+	void printQueue(priority_queue<RRProcess*, vector<RRProcess*>, S> queue) {
+		priority_queue<RRProcess*,vector<RRProcess*>,S> copy = queue;
 		
 		while (!copy.empty()) {
 			printf("%c ",idtoc(copy.top()->ID));
