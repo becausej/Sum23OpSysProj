@@ -189,19 +189,23 @@ int main(int argc, char** argv){
     vector<SJFProcess*> SJFprocesses;
     vector<SRTProcess*> SRTprocesses;
     vector<RRProcess*> RRprocesses;
-
     genProcesses(seed, numProcesses, numCPUProcesses, FCFSprocesses, SJFprocesses, SRTprocesses, RRprocesses);
 
 
     printf("\n");
     printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
     FCFS(FCFSprocesses, ctxSwitchTime);
-    // printf("\n");
-    // SJF(SJFprocesses, ctxSwitchTime);
-    // printf("\n");
-    // SRT(SRTprocesses, ctxSwitchTime);
-    // printf("\n");
-    // RR(RRprocesses, ctxSwitchTime);
+    printf("\n");
+    SJF(SJFprocesses, ctxSwitchTime);
+    printf("\n");
+    SRT(SRTprocesses, ctxSwitchTime);
+    printf("\n");
+    RR(RRprocesses, ctxSwitchTime);
 
-
+    for (int i = 0; i < numProcesses; i++) {
+        delete FCFSprocesses[i];
+        delete SJFprocesses[i];
+        delete SRTprocesses[i];
+        delete RRprocesses[i];
+    }
 }

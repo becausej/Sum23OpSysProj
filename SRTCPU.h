@@ -5,6 +5,13 @@
 #include <math.h>
 #include <numeric>
 #include <climits>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 extern unsigned long CUTOFF;
 
@@ -37,7 +44,8 @@ public:
 	//METRICS
 	int numIOCTXSwitches = 0;
 	int numCPUCTXSwitches = 0;
-	int numPreemptions = 0;
+	int numIOPreemptions = 0;
+	int numCPUPreemptions = 0;
 
 	int numCPUBoundProcesses = 0;
 	int numIOBoundProcesses = 0;
@@ -97,6 +105,7 @@ public:
 		if (CPU_TIME < min) {
 			min = CPU_TIME;
 			flag = 0;
+			// printf("CPU_TIME: %d\n",CPU_TIME);
 		} 
 
 		if (CPU_OUT_TIME < min) {
@@ -126,9 +135,17 @@ public:
 		printReady();
 		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
 			int flag = getNextEvent();
+			// printf("flag: %d\n",flag);
 			if (flag == 0) {
 				// CPU FINISH
-				elapseTime(cpu->nextFinish(),flag);
+				// printf("1\n");
+				// printReady();
+				// printf("CPU: %c\nIOBursts: ",idtoc(cpu->ID));
+				// printQueue(IOBursts);
+				// printf("bool isfinished: %s\n", cpu->shouldTerminate() ? "true" : "false");
+				int t = cpu->nextFinish();
+				elapseTime(t,flag);
+				// printf("2\n");
 
 				//UPDATE METRICS
 				if (cpu->isCPUBound)
@@ -138,7 +155,9 @@ public:
 
 
 
+				// printf("3\n");
 				if (cpu->shouldTerminate()) {
+					// printf("3.1\n");
 					printTime();
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
@@ -146,10 +165,18 @@ public:
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 				} else {
+					// printf("3.2\n");
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 					if (time < CUTOFF) printTime();
-					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printf("Process %c (tau %dms) completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->getPriority(), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printReady();
+					if (time < CUTOFF) printTime();
+					int old_tau = cpuOut->getPriority();
+					cpu->updatePriority();
+					int new_tau = cpuOut->getPriority();
+
+					if (time < CUTOFF) printf("Recalculating tau for process %c: old tau %dms ==> new tau %dms ", idtoc(cpu->ID), old_tau, new_tau);
 					if (time < CUTOFF) printReady();
 					if (time < CUTOFF) printTime();
 					if (time < CUTOFF) printf("Process %c switching out of CPU; blocking on I/O until time %ldms ", idtoc(cpu->ID), cpu->nextFinish() + time + ctxSwitchTime/2);
@@ -160,7 +187,13 @@ public:
 			else if (flag == 1) {
 				elapseTime(ctxOutTime,flag);
 
-				if (!cpuOut->shouldTerminate())
+				// printf("ShoulDTerminate: Proc %c, %s\n",idtoc(cpuOut->ID),cpuOut->shouldTerminate()?"true": "false");
+				// printf("cpuOut: %d %d\n",cpuOut->completedIOBursts,cpuOut->completedCPUBursts);
+				// printf("CPU: %p\n",cpu);
+				// printf("%p %p\n",&(cpuOut->bursts.front()), &(cpuOut->bursts.back()));
+				if (cpuOut->nextFinish() != cpuOut->tempburst)
+					readyQ.push(cpuOut);
+				else if (!cpuOut->shouldTerminate())
 					IOBursts.push(cpuOut);
 
 				ctxOutTime = INT_MAX;
@@ -173,10 +206,14 @@ public:
 				cpuIn = NULL;
 				ctxInTime = INT_MAX;
 
-				cpu->priority = 0;
+				// cpu->priority = 0;
 
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst; ", idtoc(cpu->ID), cpu->nextFinish());
+				if (cpu->nextFinish() == cpu->tempburst)  {
+					if (time < CUTOFF) printf("Process %c (tau %dms) started using the CPU for %dms burst; ", idtoc(cpu->ID), cpu->getPriority(), cpu->nextFinish());
+				} else {
+					if (time < CUTOFF) printf("Process %c (tau %dms) started using the CPU for remaining %dms of %dms burst; ", idtoc(cpu->ID), cpu->getPriority(), cpu->nextFinish(), cpu->tempburst);
+				}
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 3) {
@@ -186,12 +223,46 @@ public:
 				p->elapseTime(t);
 				elapseTime(t,flag);
 
-				p->priority = readyQCounter;
-				readyQCounter++;
+				// p->priority = readyQCounter;
+				// readyQCounter++;
 				readyQ.push(p);
-				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
-				if (time < CUTOFF) printReady();
+				// printf("1\n");
+				if (cpu != NULL) {
+					// printf("1.1\n");
+					if (p->priority < cpu->estTimeRemaining()) {
+						// printf("1.11\n");
+						if (cpu->isCPUBound) {
+							numCPUCTXSwitches++;
+							numCPUPreemptions++;
+						} else {
+							numIOCTXSwitches++;
+							numIOPreemptions++;
+						}
+						// printf("1.112\n");
+						cpuOut = cpu;
+						// printf("1.113\n");
+						cpu = NULL;
+						ctxOutTime = ctxSwitchTime/2;
+						// printf("1.114\n");
+						if (time < CUTOFF) printTime();
+						if (time < CUTOFF) printf("Process %c completed I/O; preempting %c ", idtoc(p->ID), idtoc(cpuOut->ID));
+						if (time < CUTOFF) printReady();
+
+					} else {
+						// printf("1.12\n");
+						if (time < CUTOFF) printTime();
+						if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
+						if (time < CUTOFF) printReady();
+					}
+
+				} else {
+					// printf("1.2\n");
+					// printf("should term?: %s\n",p->shouldTerminate()? "true": "false");
+
+					if (time < CUTOFF) printTime();
+					if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
+					if (time < CUTOFF) printReady();
+				}
 			} 
 			else if (flag == 4) {
 				SRTProcess* p = incoming.top();
@@ -202,7 +273,7 @@ public:
 
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c arrived; added to ready queue ", idtoc(p->ID));
+				if (time < CUTOFF) printf("Process %c (tau %dms) arrived; added to ready queue ", idtoc(p->ID), p->getPriority());
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 5) {
@@ -255,14 +326,23 @@ public:
 				IO_wait += processes[i]->total_wait_time;
 		}
 
+		int stdoutcpy = dup(1);
+		close(1);
+		int fd = open("simout.txt", O_APPEND | O_WRONLY | O_CREAT, 0660);
+		if (fd == -1) {
+			fprintf(stderr, "ERROR: could not open write file\n");
+			exit(1);
+		}
 
-		printf("Algorithm SRT\n");
-		printf("-- CPU utilization: %.3f%%\n",100.0 * cpuRunning / time);
-		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",(IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses,IOBOUND_cpu_burst_time/(double)numIOBoundProcesses);
-		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_wait/(double)numCPUBoundProcesses,IO_wait/(double)numIOBoundProcesses);
-		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_turnaround/(double)numCPUBoundProcesses,IO_turnaround/(double)numIOBoundProcesses);
+		printf("\nAlgorithm SRT\n");
+		printf("-- CPU utilization: %.3f%%\n",ceil((100.0 * cpuRunning / time)*1000.0)/1000);
+		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0)/1000);
+		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_wait/(double)numIOBoundProcesses*1000.0)/1000);
+		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0)/1000);
 		printf("-- number of context switches: %d (%d/%d)\n",numIOCTXSwitches+numCPUCTXSwitches,numCPUCTXSwitches,numIOCTXSwitches);
-		printf("-- number of preemptions: 0 (0/0)\n");
+		printf("-- number of preemptions: %d (%d/%d)\n",numIOPreemptions+numCPUPreemptions, numCPUPreemptions,numIOPreemptions);
+		dup2(stdoutcpy, 1);
+		close(stdoutcpy);
 
 		
 
@@ -275,27 +355,23 @@ public:
 		elapseWaitTimeReady(t);
 		if (cpu != NULL)
 			cpuRunning += t;
+		elapseTurnaroundTime(t);	
 		
-		if (flag == 0) {
-			// CPU FINISH
-			elapseTurnaroundTime(t);
-		} 
-		else if (flag == 1) {
-			// CPU OUT
-			elapseTurnaroundTime(t);
-		} 
-		else if (flag == 2) {
-			// CPU IN
-			elapseTurnaroundTime(t);
-		} 
-		else if (flag == 3) {
-			// IOBurst finish
-			elapseTurnaroundTime(t);
-		} 
-		else if (flag == 4) {
-			// incoming finish
-			elapseTurnaroundTime(t);
-		}
+		// if (flag == 0) {
+		// 	// CPU FINISH
+		// } 
+		// else if (flag == 1) {
+		// 	// CPU OUT
+		// } 
+		// else if (flag == 2) {
+		// 	// CPU IN
+		// } 
+		// else if (flag == 3) {
+		// 	// IOBurst finish
+		// } 
+		// else if (flag == 4) {
+		// 	// incoming finish
+		// }
 		// else if (flag == 5) {
 
 		// }
@@ -334,7 +410,7 @@ public:
 
 		if (cpu != NULL) {
 			cpu->elapseTime(t);
-			cpu->time_using_cpu += t;
+			cpu->incTimeUsingCPU(t);
 		}
 
 		if (cpuIn != NULL)

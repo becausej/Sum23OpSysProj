@@ -20,8 +20,13 @@ using namespace std;
 extern double next_exp(int);
 
 
+extern double LAMBDA;
+extern double ALPHA;
+
+
 //ID to char
 extern char idtoc(int id );
+
 
 
 
@@ -47,7 +52,17 @@ public:
 	int total_wait_time = 0;
 
 
-	SRTProcess(int id, int arrTime, int numBursts, int CPUBound) {
+	int tempburst = 0;
+
+
+
+
+
+	int last_burst_time_using_cpu = 0;
+
+
+
+	SRTProcess(int id, int arrTime, int numBursts, bool CPUBound) {
 		ID = id;
 		arrivalTime = arrTime;
 		totalCPUBursts = numBursts;
@@ -59,19 +74,31 @@ public:
                 bursts.push_back(next_exp(1)*10 / (CPUBound ? 8 : 1));
         }
         isCPUBound = CPUBound;
+        priority = ceil(1/LAMBDA);
+        tempburst = bursts.front();
 	}
 
 	void elapseTime(int t) {
+		// printf("here, %d %d\n",bursts.front(), t);
 		if (arrived) {
+			// printf("1\n");
+			// printf("comp bursts: %d %d\n", completedIOBursts, completedCPUBursts);
 			bursts.front() -= t;
-			if (bursts.front() == 0) {
-				bursts.pop_front();
-				if (completedCPUBursts > completedIOBursts) {
-					completedIOBursts++;
-				} else {
-					completedCPUBursts++;
+			if (bursts.size() != 0)
+				if (bursts.front() == 0) {
+					// printf("1.1\n");
+					bursts.pop_front();
+						tempburst = bursts.front();
+					if (completedCPUBursts > completedIOBursts) {
+						// printf("1.11\n");
+						completedIOBursts++;
+					} else {
+						completedCPUBursts++;
+						// printf("1.12\n");
+					}
 				}
-			}
+			// printf("2\n");
+			// printf("comp bursts: %d %d\n", completedIOBursts, completedCPUBursts);
 		} else {
 			arrivalTime -= t;
 			if (arrivalTime == 0) {
@@ -90,8 +117,29 @@ public:
 		return completedCPUBursts == completedIOBursts + 1 && completedCPUBursts == totalCPUBursts;
 	}
 
+	void incTimeUsingCPU(int t) {
+		time_using_cpu += t;
+		last_burst_time_using_cpu += t;
+	}
+
 	int nextFinish() {
 		return bursts.front();
+	}
+
+
+	int getPriority() {
+		return priority;
+	}
+
+
+	void updatePriority() {
+		priority = ceil(ALPHA * last_burst_time_using_cpu + ( 1 - ALPHA ) * priority);
+		// printf("last burst: %d\n",last_burst_time_using_cpu);
+		last_burst_time_using_cpu = 0;
+	}
+
+	int estTimeRemaining() {
+		return priority - (tempburst - bursts.front());
 	}
 private:
 
@@ -100,10 +148,10 @@ private:
 class SRTCompare {
 public:
     bool operator()(SRTProcess* l, SRTProcess* r) {
-        if (l->priority == r->priority)
+        if (l->getPriority() == r->getPriority())
             return l->ID > r->ID;
         
-        return l->priority > r->priority;
+        return l->getPriority() > r->getPriority();
     }
 };
 class SRTArrivalTimeCompare {

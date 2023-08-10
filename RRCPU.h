@@ -5,6 +5,13 @@
 #include <math.h>
 #include <numeric>
 #include <climits>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 extern unsigned long CUTOFF;
 extern int TIME_SLICE;
@@ -257,7 +264,6 @@ public:
 				elapseTime(t,flag);
 				p->priority = readyQCounter;
 				readyQCounter++;
-
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c arrived; added to ready queue ", idtoc(p->ID));
@@ -313,14 +319,23 @@ public:
 				IO_wait += processes[i]->total_wait_time;
 		}
 
+		int stdoutcpy = dup(1);
+		close(1);
+		int fd = open("simout.txt", O_APPEND | O_WRONLY | O_CREAT, 0660);
+		if (fd == -1) {
+			fprintf(stderr, "ERROR: could not open write file\n");
+			exit(1);
+		}
 
-		printf("Algorithm RR\n");
-		printf("-- CPU utilization: %.3f%%\n",100.0 * cpuRunning / time);
-		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",(IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses,IOBOUND_cpu_burst_time/(double)numIOBoundProcesses);
-		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_wait/(double)numCPUBoundProcesses,IO_wait/(double)numIOBoundProcesses);
-		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",(CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses),CPU_turnaround/(double)numCPUBoundProcesses,IO_turnaround/(double)numIOBoundProcesses);
+		printf("\nAlgorithm RR\n");
+		printf("-- CPU utilization: %.3f%%\n",ceil((100.0 * cpuRunning / time)*1000.0)/1000);
+		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0)/1000);
+		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_wait/(double)numIOBoundProcesses*1000.0)/1000);
+		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0)/1000);
 		printf("-- number of context switches: %d (%d/%d)\n",numIOCTXSwitches+numCPUCTXSwitches,numCPUCTXSwitches,numIOCTXSwitches);
 		printf("-- number of preemptions: %d (%d/%d)\n",numIOPreemptions+numCPUPreemptions, numCPUPreemptions,numIOPreemptions);
+		dup2(stdoutcpy, 1);
+		close(stdoutcpy);
 
 		
 
