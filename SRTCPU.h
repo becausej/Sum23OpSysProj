@@ -143,6 +143,8 @@ public:
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
 					cpu->elapseTurnaroundTime(ctxSwitchTime/2);
+					cpuOut = cpu;
+					ctxOutTime = ctxSwitchTime/2;
 				} else {
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;

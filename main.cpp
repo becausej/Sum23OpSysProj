@@ -22,6 +22,7 @@ char idtoc(int id ) {
 unsigned long CUTOFF = 10000;
 double LAMBDA;
 int UPPER_BOUND;
+int TIME_SLICE;
 double ALPHA;
 
 double next_exp(int mode){
@@ -178,7 +179,7 @@ int main(int argc, char** argv){
     UPPER_BOUND = atoi(*(argv+5));
     int ctxSwitchTime = atoi(*(argv+6));
     ALPHA = atof(*(argv+7));
-    int timeSlice = atoi(*(argv+8));
+    TIME_SLICE = atoi(*(argv+8));
     // printf("alpha: %f\n",alpha);
 
     printf("<<< PROJECT PART I -- process set (n=%d) with %d CPU-bound process%s >>>\n",numProcesses,numCPUProcesses,numCPUProcesses==1 ? "" : "es");
@@ -193,10 +194,10 @@ int main(int argc, char** argv){
 
 
     printf("\n");
-    printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, timeSlice);
-    // FCFS(FCFSprocesses, ctxSwitchTime);
+    printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
+    FCFS(FCFSprocesses, ctxSwitchTime);
     // printf("\n");
-    SJF(SJFprocesses, ctxSwitchTime);
+    // SJF(SJFprocesses, ctxSwitchTime);
     // printf("\n");
     // SRT(SRTprocesses, ctxSwitchTime);
     // printf("\n");

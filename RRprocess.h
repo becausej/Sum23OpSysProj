@@ -48,6 +48,9 @@ public:
 	int total_wait_time = 0;
 
 
+	int tempburst = 0;
+
+
 	RRProcess(int id, int arrTime, int numBursts, int CPUBound) {
 		ID = id;
 		arrivalTime = arrTime;
@@ -60,6 +63,7 @@ public:
                 bursts.push_back(next_exp(1)*10 / (CPUBound ? 8 : 1));
         }
         isCPUBound = CPUBound;
+        tempburst = bursts.front();
 	}
 
 	void elapseTime(int t) {
@@ -67,6 +71,7 @@ public:
 			bursts.front() -= t;
 			if (bursts.front() == 0) {
 				bursts.pop_front();
+				tempburst = bursts.front();
 				if (completedCPUBursts > completedIOBursts) {
 					completedIOBursts++;
 				} else {
@@ -93,6 +98,10 @@ public:
 
 	int nextFinish() {
 		return bursts.front();
+	}
+
+	void incNextFinish(int t) {
+		bursts.front() += t;
 	}
 private:
 
