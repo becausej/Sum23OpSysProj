@@ -24,11 +24,9 @@ public:
 	vector<RRProcess*> processes;
 	int ctxSwitchTime;
 
-
 	//STATE
 	unsigned long time=0;
 	int readyQCounter = 0;
-
 
 	//LOCATIONS
 	priority_queue<RRProcess*,vector<RRProcess*>,RRArrivalTimeCompare> incoming;
@@ -39,9 +37,6 @@ public:
 	int ctxOutTime = INT_MAX;
 	RRProcess* cpuIn = NULL;
 	int ctxInTime = INT_MAX;
-
-
-
 
 	//METRICS
 	int numIOCTXSwitches = 0;
@@ -72,22 +67,22 @@ public:
 	}
 
 	int getNextEvent() {
-		if (cpu == NULL && cpuIn == NULL && cpuOut == NULL && !readyQ.empty()) {
+		if (cpu == NULL && ctxInTime == INT_MAX && ctxOutTime == INT_MAX && !readyQ.empty()) {
 			int flag = 5;
 			return flag;
 		}
 
 
 		int CPU_TIME = INT_MAX;
-		if (cpu != NULL)
+		if (cpu != NULL && ctxOutTime == INT_MAX)
 			CPU_TIME = cpu->nextFinish();
 
 		int CPU_OUT_TIME = INT_MAX;
-		if (cpuOut != NULL)
+		if (ctxOutTime != INT_MAX)
 			CPU_OUT_TIME = ctxOutTime;
 
 		int CPU_IN_TIME = INT_MAX;
-		if (cpuIn != NULL)
+		if (ctxInTime != INT_MAX)
 			CPU_IN_TIME = ctxInTime;
 		
 
@@ -101,16 +96,33 @@ public:
 		if (!incoming.empty())
 			INCOMING_FINISH = incoming.top()->arrivalTime;
 		
+		int CPU_HALF_IN = INT_MAX;
+		if (ctxInTime != INT_MAX && cpuIn == NULL)
+			CPU_HALF_IN = ctxInTime - ceil((ctxSwitchTime / 2) / 2.0);
+
+		int CPU_HALF_OUT = INT_MAX;
+		if (ctxOutTime != INT_MAX && cpuOut == NULL)
+			CPU_HALF_OUT = ctxOutTime - ceil((ctxSwitchTime / 2) / 2.0);
+		
 
 		int min = INT_MAX;
 		int flag = -1;
+
+		if (CPU_HALF_OUT < min) {
+			min = CPU_HALF_OUT;
+			flag = -3;
+		}
+		if (CPU_HALF_IN < min) {
+			min = CPU_HALF_IN;
+			flag = -2;
+		}
 
 
 		if (CPU_TIME < min) {
 			min = CPU_TIME;
 			flag = 0;
 		} 
-		if (cpu != NULL && timeslice < min) {
+		if (cpu != NULL && ctxOutTime == INT_MAX && timeslice < min) {
 			min = timeslice;
 			flag = -1;
 		}
@@ -141,13 +153,32 @@ public:
 	void run() {
 		printf("time %ldms: Simulator started for RR ",time);
 		printReady();
-		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
+		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuOut != NULL || cpuIn != NULL ) {
 			int flag = getNextEvent();
 
 			// if (time < CUTOFF) printf("flag: %d\n",flag);
 			// if (time < CUTOFF) printf("timeslice: %d\n",timeslice);
-			if (flag == -1) {
-				if (!readyQ.empty() || (cpuIn!=NULL)) {
+			if (flag == -3) {
+				elapseTime(ctxOutTime - ((ctxSwitchTime/2)/2),flag);
+				cpuOut = cpu;
+				cpu = NULL;
+				if (cpuOut->isCPUBound)
+					numCPUCTXSwitches++;
+				else
+					numIOCTXSwitches++;
+				
+				if (cpuOut->got_preempted) {
+					if (cpu->isCPUBound)
+						numCPUPreemptions++;
+					else
+						numIOPreemptions++;
+				}
+			} else if (flag == -2) {
+				elapseTime(ctxInTime - ((ctxSwitchTime/2)/2),flag);
+				cpuIn = readyQ.top();
+				readyQ.pop();
+			} else if (flag == -1) {
+				if (!readyQ.empty() || (ctxInTime!=INT_MAX)) {
 					int t = timeslice;
 					elapseTime(t,flag);
 
@@ -157,17 +188,17 @@ public:
 
 
 
-					if (cpu->isCPUBound) {
-						numCPUPreemptions++;
-						numCPUCTXSwitches++;
-					} else {
-						numIOPreemptions++;
-						numIOCTXSwitches++;
-					}
+					// if (cpu->isCPUBound) {
+					// 	numCPUPreemptions++;
+					// 	numCPUCTXSwitches++;
+					// } else {
+					// 	numIOPreemptions++;
+					// 	numIOCTXSwitches++;
+					// }
 					timeslice = TIME_SLICE;
-					cpuOut = cpu;
+					// cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
-					cpu = NULL;
+					// cpu = NULL;
 				} else {
 					int t = timeslice;
 					elapseTime(t,flag);
@@ -182,24 +213,23 @@ public:
 				elapseTime(cpu->nextFinish(),flag);
 
 				//UPDATE METRICS
-				if (cpu->isCPUBound)
-					numCPUCTXSwitches++;
-				else
-					numIOCTXSwitches++;
+				// if (cpu->isCPUBound)
+				// 	numCPUCTXSwitches++;
+				// else
+				// 	numIOCTXSwitches++;
 
 
 
+				ctxOutTime = ctxSwitchTime/2;
 				if (cpu->shouldTerminate()) {
 					printTime();
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
 					// printQueue(readyQ);
 					// cpu->elapseTurnaroundTime(ctxSwitchTime/2);
-					cpuOut = cpu;
-					ctxOutTime = ctxSwitchTime/2;
+					// cpuOut = cpu;
 				} else {
-					cpuOut = cpu;
-					ctxOutTime = ctxSwitchTime/2;
+					// cpuOut = cpu;
 					if (time < CUTOFF) printTime();
 					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d burst%s to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts, (cpu->totalCPUBursts - cpu->completedCPUBursts)==1 ? "" : "s");
 					if (time < CUTOFF) printReady();
@@ -207,7 +237,7 @@ public:
 					if (time < CUTOFF) printf("Process %c switching out of CPU; blocking on I/O until time %ldms ", idtoc(cpu->ID), cpu->nextFinish() + time + ctxSwitchTime/2);
 					if (time < CUTOFF) printReady();
 				}
-				cpu = NULL;
+				// cpu = NULL;
 				timeslice = TIME_SLICE;
 			} 
 			else if (flag == 1) {
@@ -219,6 +249,7 @@ public:
 						cpuOut->priority = readyQCounter;
 						readyQCounter++;
 						readyQ.push(cpuOut);
+						cpuOut->got_preempted = false;
 					} else {
 						IOBursts.push(cpuOut);
 					}
@@ -234,10 +265,12 @@ public:
 				cpuIn = NULL;
 				ctxInTime = INT_MAX;
 
+
 				cpu->priority = 0;
 
 				if (time < CUTOFF) printTime();
-				if (cpu->nextFinish() == cpu->tempburst)  {
+				// if (cpu->got_preempted)  {
+				if (cpu->nextFinish() == cpu->tempburst && !cpu->got_preempted) {
 					if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst ", idtoc(cpu->ID), cpu->nextFinish());
 				} else {
 					if (time < CUTOFF) printf("Process %c started using the CPU for remaining %dms of %dms burst ", idtoc(cpu->ID), cpu->nextFinish(), cpu->tempburst);
@@ -259,8 +292,6 @@ public:
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
 				if (time < CUTOFF) printReady();
-				// if (time < CUTOFF) printQueue(readyQ);
-				// if (time < CUTOFF) printQueue(IOBursts);
 			} 
 			else if (flag == 4) {
 				RRProcess* p = incoming.top();
@@ -276,11 +307,14 @@ public:
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 5) {
-				RRProcess* p = readyQ.top();
-				readyQ.pop();
-				cpuIn = p;
+				// RRProcess* p = readyQ.top();
+				// readyQ.pop();
+				// cpuIn = p;
 				ctxInTime = ctxSwitchTime / 2;
 			}
+			// if (time < CUTOFF) printQueue(readyQ);
+			// if (time < CUTOFF) printQueue(IOBursts);
+			// if (time < CUTOFF) printf("cpu: %c\n",cpu == NULL ? '-' : idtoc(cpu->ID));
 			// if (time < CUTOFF) printf("\n");
 		}
 
@@ -324,16 +358,16 @@ public:
 			else
 				IO_wait += processes[i]->total_wait_time;
 		}
-		float cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
-		float cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(float)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
-		float cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
-		float awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
-		float awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
-		float att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
-		float att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
+		double cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
+		double cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		double awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		double att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
 		ofstream output;
 		output.open("simout.txt", ios::out | ios::app);
 		output.setf(ios::fixed,ios::floatfield);
@@ -344,7 +378,7 @@ public:
 		output << "-- average wait time: " << awt1 << " ms (" << awt2 << " ms/" << awt3 << " ms)\n";
 		output << "-- average turnaround time: " << att1 << " ms (" << att2 << " ms/" << att3 << " ms)\n";
 		output << "-- number of context switches: " << numIOCTXSwitches+numCPUCTXSwitches << " (" << numCPUCTXSwitches << "/" << numIOCTXSwitches << ")\n";
-		output << "-- number of preemptions: " << numIOPreemptions+numCPUPreemptions << " (" << numCPUPreemptions << "/" << numIOPreemptions << ")\n";
+		output << "-- number of preemptions: " << numIOPreemptions+numCPUPreemptions << " (" << numCPUPreemptions << "/" << numIOPreemptions << ")";
 		output.close();
 
 		
@@ -352,54 +386,28 @@ public:
 	}
 	void elapseTime(int t, int flag) {
 		time += t;
-
 		elapseTimeCPU(t,flag);
 		elapseTimeIO(t,flag);
 		elapseTimeIncoming(t,flag);
 		elapseWaitTimeReady(t);
-		if (cpu != NULL) {
+		if (cpu != NULL && ctxOutTime == INT_MAX) {
 			cpuRunning += t;
 			timeslice -= t;
 		}
 		elapseTurnaroundTime(t);
 		if (flag == -1){
 			timeslice = TIME_SLICE;
-			// elapseTurnaroundTime(t);
-		}
-		
-		if (flag == 0) {
-			// CPU FINISH
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 1) {
-			// CPU OUT
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 2) {
-			// CPU IN
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 3) {
-			// IOBurst finish
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 4) {
-			// incoming finish
-			// elapseTurnaroundTime(t);
-		}
-		else if (flag == 5) {
-
 		}
 	}
-
-
-
 	void elapseTimeIO(int t,int flag) {
 		vector<RRProcess*> procs;
+		int ID = -1;
+		if (!readyQ.empty())
+			ID = readyQ.top()->ID;
 		while (!IOBursts.empty()) {
 			RRProcess* p = IOBursts.top();
 			IOBursts.pop();
-			p->elapseTime(t,flag);
+			p->elapseTime(t,ID == p->ID ? flag : -1);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
@@ -419,24 +427,27 @@ public:
 		}
 	}
 	void elapseTimeCPU(int t,int flag) {
-		if (cpuOut != NULL) {
+		if (ctxOutTime != INT_MAX)
 			ctxOutTime -= t;
-		}
 
-		if (cpu != NULL) {
+		if (cpu != NULL && ctxOutTime == INT_MAX) {
 			cpu->elapseTime(t,flag);
 			cpu->time_using_cpu += t;
 		}
 
-		if (cpuIn != NULL)
+		if (ctxInTime != INT_MAX)
 			ctxInTime -= t;
 	}
 	void elapseWaitTimeReady(int t) {
 		vector<RRProcess*> procs;
+		int ID = -1;
+		if (!readyQ.empty() && ctxInTime!= INT_MAX && cpuIn == NULL)
+			ID = readyQ.top()->ID;
 		while (!readyQ.empty()) {
 			RRProcess* p = readyQ.top();
 			readyQ.pop();
-			p->elapseWaitTime(t);
+			if (p->ID != ID)
+				p->elapseWaitTime(t);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
@@ -474,18 +485,10 @@ public:
 
 	void printReady() {
 		priority_queue<RRProcess*,vector<RRProcess*>,RRCompare> copy = readyQ;
-		if (copy.empty() && cpuIn == NULL) {
+		if (copy.empty()) {
 			printf("[Q <empty>]\n");
 		} else {
 			printf("[Q ");
-			if (cpuIn != NULL) {
-				if (ctxInTime >= ctxSwitchTime / ((float)4.0)) {
-
-					printf("%c", idtoc(cpuIn->ID));
-					if (!copy.empty())
-						printf(" ");
-				}
-			}
 			while (!copy.empty()) {
 				if (copy.size() != 1)
 					printf("%c ",idtoc(copy.top()->ID));

@@ -80,15 +80,17 @@ public:
 	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
-				bursts.pop_front();
-					tempburst = bursts.front();
-				if (completedCPUBursts > completedIOBursts) {
-					completedIOBursts++;
-				} else {
-					completedCPUBursts++;
+			if (bursts.size() != 0)
+				if (bursts.front() == 0 &&
+					((flag == 0 && completedCPUBursts == completedIOBursts) ||
+						(flag == 3 && completedCPUBursts > completedIOBursts))) {
+					bursts.pop_front();
+					if (completedCPUBursts > completedIOBursts) {
+						completedIOBursts++;
+					} else {
+						completedCPUBursts++;
+					}
 				}
-			}
 		} else {
 			arrivalTime -= t;
 			if (arrivalTime == 0) {
@@ -134,8 +136,10 @@ private:
 class SJFCompare {
 public:
     bool operator()(SJFProcess* l, SJFProcess* r) {
-        int ladj = l->tempburst - l->nextFinish();
-        int radj = r->tempburst - r->nextFinish();
+        // int ladj = l->tempburst - l->nextFinish();
+        // int radj = r->tempburst - r->nextFinish();
+        int ladj = 0;
+        int radj = 0;
         if (l->getPriority()-ladj == r->getPriority()-radj)
             return l->ID > r->ID;
         

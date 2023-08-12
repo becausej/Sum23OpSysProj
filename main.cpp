@@ -20,7 +20,7 @@ char idtoc(int id ) {
 }
 
 
-unsigned long CUTOFF = INT_MAX;
+unsigned long CUTOFF = 10000;
 float LAMBDA;
 int UPPER_BOUND;
 int TIME_SLICE;
@@ -170,12 +170,13 @@ void genProcesses(
 
 
 int main(int argc, char** argv){
-    close(1);
-    open("out.txt",O_WRONLY | O_CREAT | O_TRUNC, 0660);
-
+    // close(1);
+    // open("out.txt",O_WRONLY | O_CREAT | O_TRUNC, 0660);
+    // freopen("out.txt","w",stdout);
     if(argc!=9) {
-        fprintf(stderr,"ERROR: Invalid arguments\n"); return EXIT_FAILURE;
+        fprintf(stdout,"ERROR: Invalid arguments\n"); return EXIT_FAILURE;
     }
+    
     int numProcesses = atoi(*(argv+1));
     int numCPUProcesses = atoi(*(argv+2));
     int seed = atoi(*(argv+3));
@@ -198,13 +199,13 @@ int main(int argc, char** argv){
 
     printf("\n");
     printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%0.2f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
-    // FCFS(FCFSprocesses, ctxSwitchTime);
-    // printf("\n");
+    FCFS(FCFSprocesses, ctxSwitchTime);
+    printf("\n");
     SJF(SJFprocesses, ctxSwitchTime);
-    // printf("\n");
-    // SRT(SRTprocesses, ctxSwitchTime);
-    // printf("\n");
-    // RR(RRprocesses, ctxSwitchTime);
+    printf("\n");
+    SRT(SRTprocesses, ctxSwitchTime);
+    printf("\n");
+    RR(RRprocesses, ctxSwitchTime);
 
     for (int i = 0; i < numProcesses; i++) {
         delete FCFSprocesses[i];
@@ -212,8 +213,5 @@ int main(int argc, char** argv){
         delete SRTprocesses[i];
         delete RRprocesses[i];
     }
-<<<<<<< HEAD
-=======
-    close(1);
->>>>>>> e9923ee (current)
+    // close(1);
 }

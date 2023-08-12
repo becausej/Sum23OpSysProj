@@ -49,6 +49,7 @@ public:
 
 
 	int tempburst = 0;
+	bool got_preempted = false;
 
 
 	RRProcess(int id, int arrTime, int numBursts, int CPUBound) {
@@ -69,15 +70,18 @@ public:
 	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
-				bursts.pop_front();
-				tempburst = bursts.front();
-				if (completedCPUBursts > completedIOBursts) {
-					completedIOBursts++;
-				} else {
-					completedCPUBursts++;
+			if (bursts.size() != 0)
+				if (bursts.front() == 0 &&
+					((flag == 0 && completedCPUBursts == completedIOBursts) ||
+						(flag == 3 && completedCPUBursts > completedIOBursts))) {
+					bursts.pop_front();
+					tempburst = bursts.front();
+					if (completedCPUBursts > completedIOBursts) {
+						completedIOBursts++;
+					} else {
+						completedCPUBursts++;
+					}
 				}
-			}
 		} else {
 			arrivalTime -= t;
 			if (arrivalTime == 0) {

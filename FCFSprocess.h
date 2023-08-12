@@ -46,6 +46,7 @@ public:
 
 	int total_turnaround_time = 0;
 	int total_wait_time = 0;
+	int tempburst = 0;
 
 
 	FCFSProcess(int id, int arrTime, int numBursts, int CPUBound) {
@@ -60,19 +61,23 @@ public:
                 bursts.push_back(next_exp(1)*10 / (CPUBound ? 8 : 1));
         }
         isCPUBound = CPUBound;
+        tempburst = bursts.front();
 	}
 
 	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
-				bursts.pop_front();
-				if (completedCPUBursts > completedIOBursts) {
-					completedIOBursts++;
-				} else {
-					completedCPUBursts++;
+			if (bursts.size() != 0)
+				if (bursts.front() == 0 &&
+					((flag == 0 && completedCPUBursts == completedIOBursts) ||
+						(flag == 3 && completedCPUBursts > completedIOBursts))) {
+					bursts.pop_front();
+					if (completedCPUBursts > completedIOBursts) {
+						completedIOBursts++;
+					} else {
+						completedCPUBursts++;
+					}
 				}
-			}
 		} else {
 			arrivalTime -= t;
 			if (arrivalTime == 0) {

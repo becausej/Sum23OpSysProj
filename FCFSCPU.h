@@ -24,29 +24,23 @@ public:
 	vector<FCFSProcess*> processes;
 	int ctxSwitchTime;
 
-
 	//STATE
 	unsigned long time=0;
 	int readyQCounter = 0;
 
-
 	//LOCATIONS
 	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSArrivalTimeCompare> incoming;
 	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> readyQ;
-	priority_queue<FCFSProcess*, vector<FCFSProcess*>,FCFSIOBurstTimeCompare> IOBursts;
+	priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSIOBurstTimeCompare> IOBursts;
 	FCFSProcess* cpu = NULL;
 	FCFSProcess* cpuOut = NULL;
 	int ctxOutTime = INT_MAX;
 	FCFSProcess* cpuIn = NULL;
 	int ctxInTime = INT_MAX;
 
-
-
-
 	//METRICS
 	int numIOCTXSwitches = 0;
 	int numCPUCTXSwitches = 0;
-	int numPreemptions = 0;
 
 	int numCPUBoundProcesses = 0;
 	int numIOBoundProcesses = 0;
@@ -69,26 +63,23 @@ public:
 	}
 
 	int getNextEvent() {
-		if (cpu == NULL && cpuIn == NULL && cpuOut == NULL && !readyQ.empty()) {
+		if (cpu == NULL && ctxOutTime == INT_MAX && ctxInTime == INT_MAX && !readyQ.empty()) {
 			int flag = 5;
 			return flag;
 		}
 
-
 		int CPU_TIME = INT_MAX;
-		if (cpu != NULL)
+		if (cpu != NULL && ctxOutTime == INT_MAX)
 			CPU_TIME = cpu->nextFinish();
 
 		int CPU_OUT_TIME = INT_MAX;
-		if (cpuOut != NULL)
+		if (ctxOutTime != INT_MAX)
 			CPU_OUT_TIME = ctxOutTime;
 
 		int CPU_IN_TIME = INT_MAX;
-		if (cpuIn != NULL)
+		if (ctxInTime != INT_MAX)
 			CPU_IN_TIME = ctxInTime;
 		
-
-
 		int IO_FINISH = INT_MAX;
 		if (!IOBursts.empty())
 			IO_FINISH = IOBursts.top()->nextFinish();
@@ -98,10 +89,27 @@ public:
 		if (!incoming.empty())
 			INCOMING_FINISH = incoming.top()->arrivalTime;
 		
+		
+		int CPU_HALF_IN = INT_MAX;
+		if (ctxInTime != INT_MAX && cpuIn == NULL)
+			CPU_HALF_IN = ctxInTime - ceil((ctxSwitchTime / 2) / 2.0);
+
+		int CPU_HALF_OUT = INT_MAX;
+		if (ctxOutTime != INT_MAX && cpuOut == NULL)
+			CPU_HALF_OUT = ctxOutTime - ceil((ctxSwitchTime / 2) / 2.0);
 
 		int min = INT_MAX;
 		int flag = -1;
 
+
+		if (CPU_HALF_OUT < min) {
+			min = CPU_HALF_OUT;
+			flag = -3;
+		}
+		if (CPU_HALF_IN < min) {
+			min = CPU_HALF_IN;
+			flag = -2;
+		}
 
 		if (CPU_TIME < min) {
 			min = CPU_TIME;
@@ -133,31 +141,42 @@ public:
 	void run() {
 		printf("time %ldms: Simulator started for FCFS ",time);
 		printReady();
-		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
+		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuOut != NULL || cpuIn != NULL) {
 			int flag = getNextEvent();
-			if (flag == 0) {
-				// CPU FINISH
-				elapseTime(cpu->nextFinish(),flag);
+			// printf("flag: %d\n",flag);
 
-				//UPDATE METRICS
-				if (cpu->isCPUBound)
+
+			if (flag == -3) {
+				elapseTime(ctxOutTime - ((ctxSwitchTime/2)/2),flag);
+				cpuOut = cpu;
+				cpu = NULL;
+				
+				if (cpuOut->isCPUBound)
 					numCPUCTXSwitches++;
 				else
 					numIOCTXSwitches++;
+			} else if (flag == -2) {
+				elapseTime(ctxInTime - ((ctxSwitchTime/2)/2),flag);
+				cpuIn = readyQ.top();
+				readyQ.pop();
+			} else if (flag == 0) {
+				// CPU FINISH
+				elapseTime(cpu->nextFinish(),flag);
+
+				// //UPDATE METRICS
+				// if (cpu->isCPUBound)
+				// 	numCPUCTXSwitches++;
+				// else
+				// 	numIOCTXSwitches++;
 
 
 
+				ctxOutTime = ctxSwitchTime/2;
 				if (cpu->shouldTerminate()) {
 					printTime();
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
-					// cpu->elapseTurnaroundTime(ctxSwitchTime/2);
-					// elapseTurnaroundTime(ctxSwitchTime/2);
-					cpuOut = cpu;
-					ctxOutTime = ctxSwitchTime/2;
 				} else {
-					cpuOut = cpu;
-					ctxOutTime = ctxSwitchTime/2;
 					if (time < CUTOFF) printTime();
 					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d burst%s to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts, cpu->totalCPUBursts - cpu->completedCPUBursts == 1 ? "" : "s");
 					if (time < CUTOFF) printReady();
@@ -165,16 +184,12 @@ public:
 					if (time < CUTOFF) printf("Process %c switching out of CPU; blocking on I/O until time %ldms ", idtoc(cpu->ID), cpu->nextFinish() + time + ctxSwitchTime/2);
 					if (time < CUTOFF) printReady();
 				}
-				cpu = NULL;
-				
 			} 
 			else if (flag == 1) {
 				elapseTime(ctxOutTime,flag);
 
 				if (!cpuOut->shouldTerminate())
 					IOBursts.push(cpuOut);
-				// else
-				// 	free(cpuOut);
 
 				ctxOutTime = INT_MAX;
 				cpuOut = NULL;
@@ -212,7 +227,6 @@ public:
 				int t = p->arrivalTime;
 				p->elapseTime(t,flag);
 				elapseTime(t,flag);
-
 				p->priority = readyQCounter;
 				readyQCounter++;
 				readyQ.push(p);
@@ -221,27 +235,19 @@ public:
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 5) {
-				FCFSProcess* p = readyQ.top();
-				readyQ.pop();
-				cpuIn = p;
 				ctxInTime = ctxSwitchTime / 2;
 			}
-			// if (time < CUTOFF) printf("\n");
+			// printf("IOBursts: ");
+			// printQueue(IOBursts);
+			// printf("cpuOut: %c\n", cpuOut == NULL ? '-' : idtoc(cpuOut->ID));
+			// printf("cpu: %c\n", cpu == NULL ? '-' : idtoc(cpu->ID));
+			// printf("cpuIn: %c\n", cpuIn == NULL ? '-' : idtoc(cpuIn->ID));
+			// printf("\n");
 		}
 
 		printTime();
 		printf("Simulator ended for FCFS ");
 		printReady();
-
-		/*
-		Algorithm FCFS
-		-- CPU utilization: 84.253%
-		-- average CPU burst time: 3067.776 ms (4071.000 ms/992.138 ms)
-		-- average wait time: 779.663 ms (217.284 ms/1943.207 ms)
-		-- average turnaround time: 3851.439 ms (4292.284 ms/2939.345 ms)
-		-- number of context switches: 89 (60/29)
-		-- number of preemptions: 0 (0/0)
-		*/
 
 		long CPUBOUND_cpu_burst_time = 0;
 		long IOBOUND_cpu_burst_time = 0;
@@ -270,16 +276,16 @@ public:
 				IO_wait += processes[i]->total_wait_time;
 		}
 
-		float cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
-		float cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(float)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
-		float cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
-		float awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
-		float awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
-		float att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
-		float att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
-		float att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
+		double cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
+		double cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		double awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		double att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		double att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		double att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
 		ofstream output;
 		output.open("simout.txt", ios::out | ios::trunc);
 		output.setf(ios::fixed,ios::floatfield);
@@ -302,42 +308,22 @@ public:
 		elapseTimeIO(t, flag);
 		elapseTimeIncoming(t, flag);
 		elapseWaitTimeReady(t);
-		if (cpu != NULL)
+		if (cpu != NULL && ctxOutTime == INT_MAX)
 			cpuRunning += t;
 		elapseTurnaroundTime(t);
-		
-		if (flag == 0) {
-			// CPU FINISH
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 1) {
-			// CPU OUT
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 2) {
-			// CPU IN
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 3) {
-			// IOBurst finish
-			// elapseTurnaroundTime(t);
-		} 
-		else if (flag == 4) {
-			// incoming finish
-		}
-		// else if (flag == 5) {
-
-		// }
 	}
 
 
 
 	void elapseTimeIO(int t, int flag) {
 		vector<FCFSProcess*> procs;
+		int ID = -1;
+		if (!readyQ.empty())
+			ID = readyQ.top()->ID;
 		while (!IOBursts.empty()) {
 			FCFSProcess* p = IOBursts.top();
 			IOBursts.pop();
-			p->elapseTime(t,flag);
+			p->elapseTime(t,ID == p->ID ? flag : -1);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
@@ -357,24 +343,28 @@ public:
 		}
 	}
 	void elapseTimeCPU(int t, int flag) {
-		if (cpuOut != NULL) {
+		if (ctxOutTime != INT_MAX)
 			ctxOutTime -= t;
-		}
+		
 
-		if (cpu != NULL) {
+		if (cpu != NULL && ctxOutTime == INT_MAX) {
 			cpu->elapseTime(t,flag);
 			cpu->time_using_cpu += t;
 		}
 
-		if (cpuIn != NULL)
+		if (ctxInTime != INT_MAX)
 			ctxInTime -= t;
 	}
 	void elapseWaitTimeReady(int t) {
 		vector<FCFSProcess*> procs;
+		int ID = -1;
+		if (!readyQ.empty() && ctxInTime!= INT_MAX && cpuIn == NULL)
+			ID = readyQ.top()->ID;
 		while (!readyQ.empty()) {
 			FCFSProcess* p = readyQ.top();
 			readyQ.pop();
-			p->elapseWaitTime(t);
+			if (p->ID != ID)
+				p->elapseWaitTime(t);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
