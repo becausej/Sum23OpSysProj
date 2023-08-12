@@ -162,10 +162,10 @@ public:
 				elapseTime(ctxOutTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
 				cpuOut = cpu;
 				cpu = NULL;
-				// if (cpuOut->isCPUBound)
-				// 	numCPUCTXSwitches++;
-				// else
-				// 	numIOCTXSwitches++;
+				if (cpuOut->isCPUBound)
+					numCPUCTXSwitches++;
+				else
+					numIOCTXSwitches++;
 				
 			} else if (flag == -2) {
 				elapseTime(ctxInTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
@@ -185,10 +185,8 @@ public:
 
 					if (cpu->isCPUBound) {
 						numCPUPreemptions++;
-						numCPUCTXSwitches++;
 					} else {
 						numIOPreemptions++;
-						numIOCTXSwitches++;
 					}
 					timeslice = TIME_SLICE;
 					// cpuOut = cpu;

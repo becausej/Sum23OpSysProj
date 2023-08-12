@@ -186,6 +186,9 @@ int main(int argc, char** argv){
     ALPHA = atof(*(argv+7));
     TIME_SLICE = atoi(*(argv+8));
     // printf("alpha: %f\n",alpha);
+    if (numProcesses <= 0 || numCPUProcesses > numProcesses || numCPUProcesses < 0 || UPPER_BOUND <= 0 || TIME_SLICE <= 0 || ALPHA > 1 || ALPHA < 0) {
+        fprintf(stdout,"ERROR: Invalid arguments\n"); return EXIT_FAILURE;
+    }
 
     printf("<<< PROJECT PART I -- process set (n=%d) with %d CPU-bound process%s >>>\n",numProcesses,numCPUProcesses,numCPUProcesses==1 ? "" : "es");
 

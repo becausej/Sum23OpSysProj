@@ -75,7 +75,10 @@ public:
                 bursts.push_back(next_exp(1)*10 / (CPUBound ? 8 : 1));
         }
         isCPUBound = CPUBound;
-        priority = ceil(1/LAMBDA);
+        if (LAMBDA != 0)
+        	priority = ceil(1/LAMBDA);
+        else
+        	priority = INT_MAX;
         tempburst = bursts.front();
 	}
 
