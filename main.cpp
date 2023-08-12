@@ -81,92 +81,6 @@ void RR(vector<RRProcess*> processes, int ctxSwitchTime) {
     cpu.run();
 }
 
-void genProcesses(
-    int seed,
-    int numProcesses, 
-    int numCPUProcesses, 
-    vector<FCFSProcess*>& FCFSprocesses,
-    vector<SJFProcess*>& SJFprocesses,
-    vector<SRTProcess*>& SRTprocesses,
-    vector<RRProcess*>& RRprocesses) {
-
-
-
-
-    srand48(seed);
-    //IO BOUND
-    for(int i=0;i<numProcesses-numCPUProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        FCFSprocesses.push_back(new FCFSProcess(i,arrivalTime,num_bursts,false));
-        printf("I/O-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-    //CPU BOUND
-    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        FCFSprocesses.push_back(new FCFSProcess(i,arrivalTime,num_bursts,true));
-        printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-
-
-
-
-    srand48(seed);
-    //IO BOUND
-    for(int i=0;i<numProcesses-numCPUProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        SJFprocesses.push_back(new SJFProcess(i,arrivalTime,num_bursts,false));
-        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-    //CPU BOUND
-    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        SJFprocesses.push_back(new SJFProcess(i,arrivalTime,num_bursts,true));
-        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-
-
-
-
-    srand48(seed);
-    //IO BOUND
-    for(int i=0;i<numProcesses-numCPUProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        SRTprocesses.push_back(new SRTProcess(i,arrivalTime,num_bursts,false));
-        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-    //CPU BOUND
-    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        SRTprocesses.push_back(new SRTProcess(i,arrivalTime,num_bursts,true));
-        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-
-
-
-
-    srand48(seed);
-    //IO BOUND
-    for(int i=0;i<numProcesses-numCPUProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        RRprocesses.push_back(new RRProcess(i,arrivalTime,num_bursts,false));
-        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-    //CPU BOUND
-    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
-        int arrivalTime = next_exp(0);
-        int num_bursts = (int)ceil(drand48()*64);
-        RRprocesses.push_back(new RRProcess(i,arrivalTime,num_bursts,true));
-        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
-    }
-}
-
 
 
 int main(int argc, char** argv){
@@ -194,27 +108,108 @@ int main(int argc, char** argv){
 
 
     vector<FCFSProcess*> FCFSprocesses;
-    vector<SJFProcess*> SJFprocesses;
-    vector<SRTProcess*> SRTprocesses;
-    vector<RRProcess*> RRprocesses;
-    genProcesses(seed, numProcesses, numCPUProcesses, FCFSprocesses, SJFprocesses, SRTprocesses, RRprocesses);
 
-
+    srand48(seed);
+    //IO BOUND
+    for(int i=0;i<numProcesses-numCPUProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        FCFSprocesses.push_back(new FCFSProcess(i,arrivalTime,num_bursts,false));
+        printf("I/O-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+    }
+    //CPU BOUND
+    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        FCFSprocesses.push_back(new FCFSProcess(i,arrivalTime,num_bursts,true));
+        printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+    }
     printf("\n");
     printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%0.2f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
     FCFS(FCFSprocesses, ctxSwitchTime);
+    for (int i = 0; i < numProcesses; i++) {
+        delete FCFSprocesses[i];
+    }
+    FCFSprocesses.clear();
+
+
+
+
+    vector<SJFProcess*> SJFprocesses;
+    srand48(seed);
+    //IO BOUND
+    for(int i=0;i<numProcesses-numCPUProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        SJFprocesses.push_back(new SJFProcess(i,arrivalTime,num_bursts,false));
+        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
+    }
+    //CPU BOUND
+    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        SJFprocesses.push_back(new SJFProcess(i,arrivalTime,num_bursts,true));
+        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+    }
     printf("\n");
     SJF(SJFprocesses, ctxSwitchTime);
+    for (int i = 0; i < numProcesses; i++) {
+        delete SJFprocesses[i];
+    }
+    SJFprocesses.clear();
+
+
+
+
+    vector<SRTProcess*> SRTprocesses;
+    srand48(seed);
+    //IO BOUND
+    for(int i=0;i<numProcesses-numCPUProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        SRTprocesses.push_back(new SRTProcess(i,arrivalTime,num_bursts,false));
+        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
+    }
+    //CPU BOUND
+    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        SRTprocesses.push_back(new SRTProcess(i,arrivalTime,num_bursts,true));
+        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+    }
     printf("\n");
     SRT(SRTprocesses, ctxSwitchTime);
+    for (int i = 0; i < numProcesses; i++) {
+        delete SRTprocesses[i];
+    }
+    SRTprocesses.clear();
+
+
+
+
+
+    vector<RRProcess*> RRprocesses;
+    srand48(seed);
+    //IO BOUND
+    for(int i=0;i<numProcesses-numCPUProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        RRprocesses.push_back(new RRProcess(i,arrivalTime,num_bursts,false));
+        // printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
+    }
+    //CPU BOUND
+    for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
+        int arrivalTime = next_exp(0);
+        int num_bursts = (int)ceil(drand48()*64);
+        RRprocesses.push_back(new RRProcess(i,arrivalTime,num_bursts,true));
+        // printf("CPU-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
+    }
     printf("\n");
     RR(RRprocesses, ctxSwitchTime);
 
     for (int i = 0; i < numProcesses; i++) {
-        delete FCFSprocesses[i];
-        delete SJFprocesses[i];
-        delete SRTprocesses[i];
         delete RRprocesses[i];
     }
+    RRprocesses.clear();
     // close(1);
 }
