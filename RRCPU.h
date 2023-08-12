@@ -159,22 +159,16 @@ public:
 			// if (time < CUTOFF) printf("flag: %d\n",flag);
 			// if (time < CUTOFF) printf("timeslice: %d\n",timeslice);
 			if (flag == -3) {
-				elapseTime(ctxOutTime - ((ctxSwitchTime/2)/2),flag);
+				elapseTime(ctxOutTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
 				cpuOut = cpu;
 				cpu = NULL;
-				if (cpuOut->isCPUBound)
-					numCPUCTXSwitches++;
-				else
-					numIOCTXSwitches++;
+				// if (cpuOut->isCPUBound)
+				// 	numCPUCTXSwitches++;
+				// else
+				// 	numIOCTXSwitches++;
 				
-				if (cpuOut->got_preempted) {
-					if (cpu->isCPUBound)
-						numCPUPreemptions++;
-					else
-						numIOPreemptions++;
-				}
 			} else if (flag == -2) {
-				elapseTime(ctxInTime - ((ctxSwitchTime/2)/2),flag);
+				elapseTime(ctxInTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
 				cpuIn = readyQ.top();
 				readyQ.pop();
 			} else if (flag == -1) {
@@ -187,14 +181,15 @@ public:
 					if (time < CUTOFF) printReady();
 
 
+					
 
-					// if (cpu->isCPUBound) {
-					// 	numCPUPreemptions++;
-					// 	numCPUCTXSwitches++;
-					// } else {
-					// 	numIOPreemptions++;
-					// 	numIOCTXSwitches++;
-					// }
+					if (cpu->isCPUBound) {
+						numCPUPreemptions++;
+						numCPUCTXSwitches++;
+					} else {
+						numIOPreemptions++;
+						numIOCTXSwitches++;
+					}
 					timeslice = TIME_SLICE;
 					// cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
@@ -242,7 +237,7 @@ public:
 			} 
 			else if (flag == 1) {
 				elapseTime(ctxOutTime,flag);
-
+				
 
 				if (!cpuOut->shouldTerminate()) {
 					if (cpuOut->completedCPUBursts == cpuOut->completedIOBursts) {

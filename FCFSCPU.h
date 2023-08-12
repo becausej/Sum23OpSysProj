@@ -147,7 +147,7 @@ public:
 
 
 			if (flag == -3) {
-				elapseTime(ctxOutTime - ((ctxSwitchTime/2)/2),flag);
+				elapseTime(ctxOutTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
 				cpuOut = cpu;
 				cpu = NULL;
 				
@@ -156,7 +156,7 @@ public:
 				else
 					numIOCTXSwitches++;
 			} else if (flag == -2) {
-				elapseTime(ctxInTime - ((ctxSwitchTime/2)/2),flag);
+				elapseTime(ctxInTime - ceil((ctxSwitchTime / 2) / 2.0),flag);
 				cpuIn = readyQ.top();
 				readyQ.pop();
 			} else if (flag == 0) {
@@ -237,12 +237,6 @@ public:
 			else if (flag == 5) {
 				ctxInTime = ctxSwitchTime / 2;
 			}
-			// printf("IOBursts: ");
-			// printQueue(IOBursts);
-			// printf("cpuOut: %c\n", cpuOut == NULL ? '-' : idtoc(cpuOut->ID));
-			// printf("cpu: %c\n", cpu == NULL ? '-' : idtoc(cpu->ID));
-			// printf("cpuIn: %c\n", cpuIn == NULL ? '-' : idtoc(cpuIn->ID));
-			// printf("\n");
 		}
 
 		printTime();
