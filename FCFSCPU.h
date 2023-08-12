@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <fstream>
+
 extern unsigned long CUTOFF;
 
 
@@ -133,22 +135,6 @@ public:
 		printReady();
 		while (!readyQ.empty() || !incoming.empty() || !IOBursts.empty() || cpu!=NULL || cpuIn!=NULL || cpuOut!=NULL ) {
 			int flag = getNextEvent();
-			// if (time < CUTOFF) printf("flag: %d\n",flag);
-
-			// if (time < CUTOFF) printf("iobursts: ");
-			// if (time < CUTOFF) printQueue(IOBursts);
-			// if (time < CUTOFF) printf("incoming: ");
-			// if (time < CUTOFF) printQueue(incoming);
-			// if (time < CUTOFF) printf("ready: ");
-			// if (time < CUTOFF) printQueue(readyQ);
-			// if (time < CUTOFF) printf("cpu: ");
-			// if (time < CUTOFF)  {
-			// 	if (cpu == NULL) {
-			// 		printf("null\n");
-			// 	} else { 
-			// 		printf("%c\n", (char)cpu->ID+65);
-			// 	} 
-			// }
 			if (flag == 0) {
 				// CPU FINISH
 				elapseTime(cpu->nextFinish(),flag);
@@ -165,14 +151,15 @@ public:
 					printTime();
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
-					cpu->elapseTurnaroundTime(ctxSwitchTime/2);
+					// cpu->elapseTurnaroundTime(ctxSwitchTime/2);
+					// elapseTurnaroundTime(ctxSwitchTime/2);
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 				} else {
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 					if (time < CUTOFF) printTime();
-					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printf("Process %c completed a CPU burst; %d burst%s to go ", idtoc(cpu->ID), cpu->totalCPUBursts - cpu->completedCPUBursts, cpu->totalCPUBursts - cpu->completedCPUBursts == 1 ? "" : "s");
 					if (time < CUTOFF) printReady();
 					if (time < CUTOFF) printTime();
 					if (time < CUTOFF) printf("Process %c switching out of CPU; blocking on I/O until time %ldms ", idtoc(cpu->ID), cpu->nextFinish() + time + ctxSwitchTime/2);
@@ -202,14 +189,14 @@ public:
 				cpu->priority = 0;
 
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst; ", idtoc(cpu->ID), cpu->nextFinish());
+				if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst ", idtoc(cpu->ID), cpu->nextFinish());
 				if (time < CUTOFF) printReady();
 			} 
 			else if (flag == 3) {
 				FCFSProcess* p = IOBursts.top();
 				int t = p->nextFinish();
 				IOBursts.pop();
-				p->elapseTime(t);
+				p->elapseTime(t,flag);
 				elapseTime(t,flag);
 
 				p->priority = readyQCounter;
@@ -223,9 +210,11 @@ public:
 				FCFSProcess* p = incoming.top();
 				incoming.pop();
 				int t = p->arrivalTime;
-				p->elapseTime(t);
+				p->elapseTime(t,flag);
 				elapseTime(t,flag);
 
+				p->priority = readyQCounter;
+				readyQCounter++;
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c arrived; added to ready queue ", idtoc(p->ID));
@@ -280,54 +269,61 @@ public:
 			else
 				IO_wait += processes[i]->total_wait_time;
 		}
-		int stdoutcpy = dup(1);
-		close(1);
-		int fd = open("simout.txt", O_WRONLY | O_CREAT | O_TRUNC, 0660);
-		if (fd == -1) {
-			fprintf(stderr, "ERROR: could not open write file\n");
-			exit(1);
-		}
-		printf("Algorithm FCFS\n");
-		printf("-- CPU utilization: %.3f%%\n",ceil((100.0 * cpuRunning / time)*1000.0)/1000);
-		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_wait/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- number of context switches: %d (%d/%d)\n",numIOCTXSwitches+numCPUCTXSwitches,numCPUCTXSwitches,numIOCTXSwitches);
-		printf("-- number of preemptions: 0 (0/0)\n");
-		dup2(stdoutcpy, 1);
-		close(stdoutcpy);
+
+		float cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
+		float cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(float)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
+		float cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		float awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		float awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		float att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		float att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		ofstream output;
+		output.open("simout.txt", ios::out | ios::trunc);
+		output.setf(ios::fixed,ios::floatfield);
+		output.precision(3);
+		output << "Algorithm FCFS\n";
+		output << "-- CPU utilization: " << cu << "%\n";
+		output << "-- average CPU burst time: " << cbt1 << " ms (" << cbt2 << " ms/" << cbt3 << " ms)\n";
+		output << "-- average wait time: " << awt1 << " ms (" << awt2 << " ms/" << awt3 << " ms)\n";
+		output << "-- average turnaround time: " << att1 << " ms (" << att2 << " ms/" << att3 << " ms)\n";
+		output << "-- number of context switches: " << numIOCTXSwitches+numCPUCTXSwitches << " (" << numCPUCTXSwitches << "/" << numIOCTXSwitches << ")\n";
+		output << "-- number of preemptions: 0 (0/0)\n\n";
+		output.close();
 
 		
 
 	}
 	void elapseTime(int t, int flag) {
 		time += t;
-		elapseTimeCPU(t);
-		elapseTimeIO(t);
-		elapseTimeIncoming(t);
+		elapseTimeCPU(t, flag);
+		elapseTimeIO(t, flag);
+		elapseTimeIncoming(t, flag);
 		elapseWaitTimeReady(t);
 		if (cpu != NULL)
 			cpuRunning += t;
+		elapseTurnaroundTime(t);
 		
 		if (flag == 0) {
 			// CPU FINISH
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 1) {
 			// CPU OUT
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 2) {
 			// CPU IN
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 3) {
 			// IOBurst finish
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 4) {
 			// incoming finish
-			elapseTurnaroundTime(t);
 		}
 		// else if (flag == 5) {
 
@@ -336,37 +332,37 @@ public:
 
 
 
-	void elapseTimeIO(int t) {
+	void elapseTimeIO(int t, int flag) {
 		vector<FCFSProcess*> procs;
 		while (!IOBursts.empty()) {
 			FCFSProcess* p = IOBursts.top();
 			IOBursts.pop();
-			p->elapseTime(t);
+			p->elapseTime(t,flag);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
 			IOBursts.push(procs[i]);
 		}
 	}
-	void elapseTimeIncoming(int t) {
+	void elapseTimeIncoming(int t, int flag) {
 		vector<FCFSProcess*> procs;
 		while (!incoming.empty()) {
 			FCFSProcess* p = incoming.top();
 			incoming.pop();
-			p->elapseTime(t);
+			p->elapseTime(t,flag);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
 			incoming.push(procs[i]);
 		}
 	}
-	void elapseTimeCPU(int t) {
+	void elapseTimeCPU(int t, int flag) {
 		if (cpuOut != NULL) {
 			ctxOutTime -= t;
 		}
 
 		if (cpu != NULL) {
-			cpu->elapseTime(t);
+			cpu->elapseTime(t,flag);
 			cpu->time_using_cpu += t;
 		}
 
@@ -418,11 +414,14 @@ public:
 	void printReady() {
 		priority_queue<FCFSProcess*,vector<FCFSProcess*>,FCFSCompare> copy = readyQ;
 		if (copy.empty()) {
-			printf("[Q <empty> ]\n");
+			printf("[Q <empty>]\n");
 		} else {
 			printf("[Q ");
 			while (!copy.empty()) {
-				printf("%c ",idtoc(copy.top()->ID));
+				if (copy.size() != 1)
+					printf("%c ",idtoc(copy.top()->ID));
+				else
+					printf("%c",idtoc(copy.top()->ID));
 				copy.pop();
 				
 			}

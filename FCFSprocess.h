@@ -17,7 +17,7 @@
 
 using namespace std;
 
-extern double next_exp(int);
+extern float next_exp(int);
 
 
 //ID to char
@@ -62,10 +62,10 @@ public:
         isCPUBound = CPUBound;
 	}
 
-	void elapseTime(int t) {
+	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0) {
+			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
 				bursts.pop_front();
 				if (completedCPUBursts > completedIOBursts) {
 					completedIOBursts++;

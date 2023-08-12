@@ -17,11 +17,11 @@
 
 using namespace std;
 
-extern double next_exp(int);
+extern float next_exp(int);
 
 
-extern double LAMBDA;
-extern double ALPHA;
+extern float LAMBDA;
+extern float ALPHA;
 
 
 //ID to char
@@ -57,6 +57,8 @@ public:
 
 	int last_burst_time_using_cpu = 0;
 
+	int tempburst = 0;
+
 
 
 	SJFProcess(int id, int arrTime, int numBursts, bool CPUBound) {
@@ -72,13 +74,15 @@ public:
         }
         isCPUBound = CPUBound;
         priority = ceil(1/LAMBDA);
+        tempburst = bursts.front();
 	}
 
-	void elapseTime(int t) {
+	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0) {
+			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
 				bursts.pop_front();
+					tempburst = bursts.front();
 				if (completedCPUBursts > completedIOBursts) {
 					completedIOBursts++;
 				} else {
@@ -119,7 +123,7 @@ public:
 
 
 	void updatePriority() {
-		priority = ceil(ALPHA * last_burst_time_using_cpu + ( 1 - ALPHA ) * priority);
+		priority = ceil(ALPHA * last_burst_time_using_cpu + ( 1.0 - ALPHA ) * priority);
 		// printf("last burst: %d\n",last_burst_time_using_cpu);
 		last_burst_time_using_cpu = 0;
 	}
@@ -130,10 +134,13 @@ private:
 class SJFCompare {
 public:
     bool operator()(SJFProcess* l, SJFProcess* r) {
-        if (l->getPriority() == r->getPriority())
+        int ladj = l->tempburst - l->nextFinish();
+        int radj = r->tempburst - r->nextFinish();
+        if (l->getPriority()-ladj == r->getPriority()-radj)
             return l->ID > r->ID;
         
-        return l->getPriority() > r->getPriority();
+        
+        return l->getPriority() - ladj > r->getPriority() - radj;
     }
 };
 class SJFArrivalTimeCompare {

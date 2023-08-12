@@ -17,7 +17,7 @@
 
 using namespace std;
 
-extern double next_exp(int);
+extern float next_exp(int);
 
 
 //ID to char
@@ -66,10 +66,10 @@ public:
         tempburst = bursts.front();
 	}
 
-	void elapseTime(int t) {
+	void elapseTime(int t, int flag) {
 		if (arrived) {
 			bursts.front() -= t;
-			if (bursts.front() == 0) {
+			if (bursts.front() == 0 && (flag == 0 || flag == 3)) {
 				bursts.pop_front();
 				tempburst = bursts.front();
 				if (completedCPUBursts > completedIOBursts) {
@@ -103,6 +103,10 @@ public:
 	void incNextFinish(int t) {
 		bursts.front() += t;
 	}
+
+	int getPriority() {
+		return priority;
+	}
 private:
 
 
@@ -110,10 +114,13 @@ private:
 class RRCompare {
 public:
     bool operator()(RRProcess* l, RRProcess* r) {
-        if (l->priority == r->priority)
-            return l->ID > r->ID;
+        // int ladj = l->tempburst - l->nextFinish();
+        // int radj = r->tempburst - r->nextFinish();
+        // if (l->getPriority()-ladj == r->getPriority()-radj)
+        //     return l->ID > r->ID;
         
-        return l->priority > r->priority;
+        
+        return l->getPriority() > r->getPriority();
     }
 };
 class RRArrivalTimeCompare {

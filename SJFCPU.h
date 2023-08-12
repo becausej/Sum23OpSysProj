@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <fstream>
 
 extern unsigned long CUTOFF;
 
@@ -150,14 +151,14 @@ public:
 					printTime();
 					printf("Process %c terminated ", idtoc(cpu->ID));
 					printReady();
-					cpu->elapseTurnaroundTime(ctxSwitchTime/2);
+					// cpu->elapseTurnaroundTime(ctxSwitchTime/2);
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 				} else {
 					cpuOut = cpu;
 					ctxOutTime = ctxSwitchTime/2;
 					if (time < CUTOFF) printTime();
-					if (time < CUTOFF) printf("Process %c (tau %dms) completed a CPU burst; %d bursts to go ", idtoc(cpu->ID), cpu->getPriority(), cpu->totalCPUBursts - cpu->completedCPUBursts);
+					if (time < CUTOFF) printf("Process %c (tau %dms) completed a CPU burst; %d burst%s to go ", idtoc(cpu->ID), cpu->getPriority(), cpu->totalCPUBursts - cpu->completedCPUBursts, (cpu->totalCPUBursts - cpu->completedCPUBursts)==1 ? "" : "s");
 					if (time < CUTOFF) printReady();
 					if (time < CUTOFF) printTime();
 					int old_tau = cpuOut->getPriority();
@@ -171,6 +172,8 @@ public:
 					if (time < CUTOFF) printReady();
 				}
 				cpu = NULL;
+				printQueue(readyQ);
+				printQueue(IOBursts);
 			} 
 			else if (flag == 1) {
 				elapseTime(ctxOutTime,flag);
@@ -191,34 +194,40 @@ public:
 				// cpu->priority = 0;
 
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c started using the CPU for %dms burst; ", idtoc(cpu->ID), cpu->nextFinish());
+				if (time < CUTOFF) printf("Process %c (tau %dms) started using the CPU for %dms burst ", idtoc(cpu->ID), cpu->getPriority(), cpu->nextFinish());
 				if (time < CUTOFF) printReady();
+				printQueue(readyQ);
+				printQueue(IOBursts);
 			} 
 			else if (flag == 3) {
 				SJFProcess* p = IOBursts.top();
 				int t = p->nextFinish();
 				IOBursts.pop();
-				p->elapseTime(t);
+				p->elapseTime(t,flag);
 				elapseTime(t,flag);
 
 				// p->priority = readyQCounter;
 				// readyQCounter++;
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
-				if (time < CUTOFF) printf("Process %c completed I/O; added to ready queue ", idtoc(p->ID));
+				if (time < CUTOFF) printf("Process %c (tau %dms) completed I/O; added to ready queue ", idtoc(p->ID), p->getPriority());
 				if (time < CUTOFF) printReady();
+				printQueue(readyQ);
+				printQueue(IOBursts);
 			} 
 			else if (flag == 4) {
 				SJFProcess* p = incoming.top();
 				incoming.pop();
 				int t = p->arrivalTime;
-				p->elapseTime(t);
+				p->elapseTime(t,flag);
 				elapseTime(t,flag);
 
 				readyQ.push(p);
 				if (time < CUTOFF) printTime();
 				if (time < CUTOFF) printf("Process %c (tau %dms) arrived; added to ready queue ", idtoc(p->ID), p->getPriority());
 				if (time < CUTOFF) printReady();
+				printQueue(readyQ);
+				printQueue(IOBursts);
 			} 
 			else if (flag == 5) {
 				SJFProcess* p = readyQ.top();
@@ -270,55 +279,62 @@ public:
 				IO_wait += processes[i]->total_wait_time;
 		}
 
-		int stdoutcpy = dup(1);
-		close(1);
-		int fd = open("simout.txt", O_APPEND | O_WRONLY | O_CREAT, 0660);
-		if (fd == -1) {
-			fprintf(stderr, "ERROR: could not open write file\n");
-			exit(1);
-		}
-
-		printf("\nAlgorithm SJF\n");
-		printf("-- CPU utilization: %.3f%%\n",ceil((100.0 * cpuRunning / time)*1000.0)/1000);
-		printf("-- average CPU burst time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPUBOUND_cpu_burst_time/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IOBOUND_cpu_burst_time/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- average wait time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_wait + IO_wait)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_wait/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_wait/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- average turnaround time: %.3f ms (%.3f ms/%.3f ms)\n",ceil((CPU_turnaround + IO_turnaround)/(double)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0)/1000,ceil(CPU_turnaround/(double)numCPUBoundProcesses*1000.0)/1000,ceil(IO_turnaround/(double)numIOBoundProcesses*1000.0)/1000);
-		printf("-- number of context switches: %d (%d/%d)\n",numIOCTXSwitches+numCPUCTXSwitches,numCPUCTXSwitches,numIOCTXSwitches);
-		printf("-- number of preemptions: 0 (0/0)\n");
-		dup2(stdoutcpy, 1);
-		close(stdoutcpy);
+		float cu = time? (ceil((100.0 * cpuRunning / time)*1000.0))/1000.0 : 0.0;
+		float cbt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? (ceil(((IOBOUND_cpu_burst_time + CPUBOUND_cpu_burst_time)/(float)(numIOBoundProcesses+numCPUBoundProcesses))*1000.0))/1000.0 : 0.0;
+		float cbt2 = numCPUBoundProcesses ? (ceil(CPUBOUND_cpu_burst_time/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float cbt3 = numIOBoundProcesses ? (ceil(IOBOUND_cpu_burst_time/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		float awt1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_wait + IO_wait)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		float awt2 = numCPUBoundProcesses ? ( ceil(CPU_wait/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float awt3 = numIOBoundProcesses ? ( ceil(IO_wait/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		float att1 = (numIOBoundProcesses+numCPUBoundProcesses) ? ( ceil((CPU_turnaround + IO_turnaround)/(float)(numIOBoundProcesses+numCPUBoundProcesses)*1000.0))/1000.0 : 0.0;
+		float att2 = numCPUBoundProcesses ? ( ceil(CPU_turnaround/(float)numCPUBoundProcesses*1000.0))/1000.0 : 0.0;
+		float att3 = numIOBoundProcesses ? ( ceil(IO_turnaround/(float)numIOBoundProcesses*1000.0))/1000.0 : 0.0;
+		ofstream output;
+		output.open("simout.txt", ios::out | ios::app);
+		output.setf(ios::fixed,ios::floatfield);
+		output.precision(3);
+		output << "Algorithm SJF\n";
+		output << "-- CPU utilization: " << cu << "%\n";
+		output << "-- average CPU burst time: " << cbt1 << " ms (" << cbt2 << " ms/" << cbt3 << " ms)\n";
+		output << "-- average wait time: " << awt1 << " ms (" << awt2 << " ms/" << awt3 << " ms)\n";
+		output << "-- average turnaround time: " << att1 << " ms (" << att2 << " ms/" << att3 << " ms)\n";
+		output << "-- number of context switches: " << numIOCTXSwitches+numCPUCTXSwitches << " (" << numCPUCTXSwitches << "/" << numIOCTXSwitches << ")\n";
+		output << "-- number of preemptions: 0 (0/0)\n\n";
+		output.close();
 
 		
 
 	}
 	void elapseTime(int t, int flag) {
 		time += t;
-		elapseTimeCPU(t);
-		elapseTimeIO(t);
-		elapseTimeIncoming(t);
+		elapseTimeCPU(t,flag);
+		elapseTimeIO(t,flag);
+		elapseTimeIncoming(t,flag);
 		elapseWaitTimeReady(t);
-		if (cpu != NULL)
+		if (cpu != NULL) {
 			cpuRunning += t;
+		}
+		elapseTurnaroundTime(t);
 		
 		if (flag == 0) {
 			// CPU FINISH
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 1) {
 			// CPU OUT
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 2) {
 			// CPU IN
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 3) {
 			// IOBurst finish
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		} 
 		else if (flag == 4) {
 			// incoming finish
-			elapseTurnaroundTime(t);
+			// elapseTurnaroundTime(t);
 		}
 		// else if (flag == 5) {
 
@@ -327,37 +343,37 @@ public:
 
 
 
-	void elapseTimeIO(int t) {
+	void elapseTimeIO(int t, int flag) {
 		vector<SJFProcess*> procs;
 		while (!IOBursts.empty()) {
 			SJFProcess* p = IOBursts.top();
 			IOBursts.pop();
-			p->elapseTime(t);
+			p->elapseTime(t,flag);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
 			IOBursts.push(procs[i]);
 		}
 	}
-	void elapseTimeIncoming(int t) {
+	void elapseTimeIncoming(int t, int flag) {
 		vector<SJFProcess*> procs;
 		while (!incoming.empty()) {
 			SJFProcess* p = incoming.top();
 			incoming.pop();
-			p->elapseTime(t);
+			p->elapseTime(t,flag);
 			procs.push_back(p);
 		}
 		for (size_t i = 0; i < procs.size(); i++) {
 			incoming.push(procs[i]);
 		}
 	}
-	void elapseTimeCPU(int t) {
+	void elapseTimeCPU(int t, int flag) {
 		if (cpuOut != NULL) {
 			ctxOutTime -= t;
 		}
 
 		if (cpu != NULL) {
-			cpu->elapseTime(t);
+			cpu->elapseTime(t,flag);
 			cpu->incTimeUsingCPU(t);
 		}
 
@@ -409,11 +425,22 @@ public:
 	void printReady() {
 		priority_queue<SJFProcess*,vector<SJFProcess*>,SJFCompare> copy = readyQ;
 		if (copy.empty()) {
-			printf("[Q <empty> ]\n");
+			printf("[Q <empty>]\n");
 		} else {
 			printf("[Q ");
+			if (cpuIn != NULL) {
+				if (ctxInTime >= ctxSwitchTime / ((float)4.0)) {
+
+					printf("%c", idtoc(cpuIn->ID));
+					if (!copy.empty())
+						printf(" ");
+				}
+			}
 			while (!copy.empty()) {
-				printf("%c ",idtoc(copy.top()->ID));
+				if (copy.size() != 1)
+					printf("%c ",idtoc(copy.top()->ID));
+				else
+					printf("%c",idtoc(copy.top()->ID));
 				copy.pop();
 				
 			}
@@ -425,12 +452,24 @@ public:
 	void printQueue(priority_queue<SJFProcess*, vector<SJFProcess*>, S> queue) {
 		priority_queue<SJFProcess*,vector<SJFProcess*>,S> copy = queue;
 		
+		
 		while (!copy.empty()) {
 			printf("%c ",idtoc(copy.top()->ID));
 			copy.pop();
 		}
+		copy= queue;
 		printf("\n");
-
+		while (!copy.empty()) {
+			printf("%d ",copy.top()->priority);
+			copy.pop();
+		}
+		copy= queue;
+		printf("\n");
+		while (!copy.empty()) {
+			printf("%d ",copy.top()->nextFinish());
+			copy.pop();
+		}
+		printf("\n");
 	}
 };
 

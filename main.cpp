@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <list>
 #include <utility>
+#include <climits>
 
 
 using namespace std;
@@ -19,17 +20,17 @@ char idtoc(int id ) {
 }
 
 
-unsigned long CUTOFF = 10000;
-double LAMBDA;
+unsigned long CUTOFF = INT_MAX;
+float LAMBDA;
 int UPPER_BOUND;
 int TIME_SLICE;
-double ALPHA;
+float ALPHA;
 
-double next_exp(int mode){
+float next_exp(int mode){
     int cont = 1;
-    double toReturn;
+    float toReturn;
     while(cont){
-        double result = drand48();
+        float result = drand48();
         toReturn = -log(result)/LAMBDA;
         if(mode==0){
             toReturn = floor(toReturn);
@@ -98,7 +99,7 @@ void genProcesses(
         int arrivalTime = next_exp(0);
         int num_bursts = (int)ceil(drand48()*64);
         FCFSprocesses.push_back(new FCFSProcess(i,arrivalTime,num_bursts,false));
-        printf("I/O-bound process %c: arrival time %dms; %d CPU bursts:\n",(char)(i+65),arrivalTime,num_bursts);
+        printf("I/O-bound process %c: arrival time %dms; %d CPU bursts\n",(char)(i+65),arrivalTime,num_bursts);
     }
     //CPU BOUND
     for(int i=numProcesses-numCPUProcesses;i<numProcesses;i++){
@@ -169,6 +170,9 @@ void genProcesses(
 
 
 int main(int argc, char** argv){
+    close(1);
+    open("out.txt",O_WRONLY | O_CREAT | O_TRUNC, 0660);
+
     if(argc!=9) {
         fprintf(stderr,"ERROR: Invalid arguments\n"); return EXIT_FAILURE;
     }
@@ -193,14 +197,14 @@ int main(int argc, char** argv){
 
 
     printf("\n");
-    printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
-    FCFS(FCFSprocesses, ctxSwitchTime);
-    printf("\n");
+    printf("<<< PROJECT PART II -- t_cs=%dms; alpha=%0.2f; t_slice=%dms >>>\n",ctxSwitchTime, ALPHA, TIME_SLICE);
+    // FCFS(FCFSprocesses, ctxSwitchTime);
+    // printf("\n");
     SJF(SJFprocesses, ctxSwitchTime);
-    printf("\n");
-    SRT(SRTprocesses, ctxSwitchTime);
-    printf("\n");
-    RR(RRprocesses, ctxSwitchTime);
+    // printf("\n");
+    // SRT(SRTprocesses, ctxSwitchTime);
+    // printf("\n");
+    // RR(RRprocesses, ctxSwitchTime);
 
     for (int i = 0; i < numProcesses; i++) {
         delete FCFSprocesses[i];
@@ -208,4 +212,8 @@ int main(int argc, char** argv){
         delete SRTprocesses[i];
         delete RRprocesses[i];
     }
+<<<<<<< HEAD
+=======
+    close(1);
+>>>>>>> e9923ee (current)
 }
